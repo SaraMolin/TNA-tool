@@ -61,7 +61,7 @@ class AzureLLMClient:
         """
         try:
             # Construct Azure OpenAI REST API URL
-            url = f"{self.endpoint}/openai/deployments/{self.model_name}/chat/completions?api-version=2024-08-01-preview"
+            url = f"{self.endpoint}/openai/deployments/{self.model_name}/chat/completions?api-version=2025-01-01-preview"
             
             headers = {
                 "api-key": self.api_key,
@@ -77,7 +77,7 @@ class AzureLLMClient:
                 "max_completion_tokens": max_tokens,  # GPT-5.4 parameter
             }
             
-            response = requests.post(url, headers=headers, json=payload, timeout=30)
+            response = requests.post(url, headers=headers, json=payload, timeout=120)
             response.raise_for_status()
             
             result = response.json()

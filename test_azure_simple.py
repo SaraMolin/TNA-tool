@@ -12,8 +12,13 @@ sys.path.insert(0, os.path.dirname(__file__))
 from pathlib import Path
 import dotenv
 
-env_path = Path(__file__).parent / ".env"
-dotenv.load_dotenv(env_path)
+# Explicit absolute path
+env_path = Path(__file__).resolve().parent / ".env"
+print(f"[DEBUG] Loading .env from: {env_path}")
+print(f"[DEBUG] File exists: {env_path.exists()}")
+
+result = dotenv.load_dotenv(env_path)
+print(f"[DEBUG] load_dotenv returned: {result}")
 
 # Hämta uppgifter
 endpoint = os.getenv("AZURE_ENDPOINT")
