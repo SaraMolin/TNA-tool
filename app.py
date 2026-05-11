@@ -46,7 +46,7 @@ def configure_page():
     """
     st.set_page_config(
         page_title="TNA Tool - Training Needs Analysis",
-        page_icon="🎯",
+        page_icon="",
         layout="wide",
         initial_sidebar_state="expanded"
     )
@@ -72,7 +72,7 @@ def render_main_content():
     left_col, right_col = st.columns([1, 2])
     
     with left_col:
-        st.subheader("📊 Analysresultat")
+        st.subheader("Analysresultat")
         
         if "analysis_result" in st.session_state and st.session_state.analysis_result:
             result = st.session_state.analysis_result

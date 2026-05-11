@@ -1,12 +1,12 @@
 # TNA Tool — Training Needs Analysis Automation
 
-En Streamlit-baserad applikation för att automatisera analys av svenska militär- och tekniska PDF-dokument med hjälp av AI (OpenAI).
+En Streamlit-baserad applikation för att automatisera analys av svenska militär- och tekniska PDF-dokument med hjälp av AI.
 
 ## Funktioner
 
 - **PDF-uppladdning**: Ladda upp svenska militära dokument (instruktionsböcker, reglementen, handböcker, reparationsböcker)
 - **Automatisk bearbetning**: Förbehandling och segmentering av PDF-innehål
-- **AI-analys**: Använder OpenAI API för att synthesera en strukturerad uppgifts-hierarki
+- **AI-analys**: Använder Azure AI Foundry för att synthesera en strukturerad uppgifts-hierarki
 - **Interaktiv granskning**: Mänsklig recensent kan flagga utgångar för granskning
 - **Excel-export**: Ladda ned resultaten som en strukturerad Excel-fil
 
@@ -16,7 +16,6 @@ En Streamlit-baserad applikation för att automatisera analys av svenska militä
 
 - Python 3.11 eller senare
 - macOS (eller Linux/Windows med motsvarande kommandon)
-- OpenAI API-nyckel från [platform.openai.com](https://platform.openai.com)
 
 ### Setup
 
@@ -36,20 +35,19 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-4. **Konfigurera OpenAI API:**
+4. **Konfigurera Azure AI Foundry-autentisering:**
 
 Skapa en `.env`-fil i projektets root-mapp (kopiera `.env.example`):
 ```bash
 cp .env.example .env
 ```
 
-Fyll i dina OpenAI-uppgifter i `.env`:
+Fyll i dina Azure-uppgifter i `.env`:
 ```
-OPENAI_API_KEY=sk-your-api-key-here
-OPENAI_MODEL_NAME=gpt-4o
+AZURE_ENDPOINT=https://your-resource.services.ai.azure.com/models
+AZURE_API_KEY=your-api-key-here
+AZURE_MODEL_NAME=your-model-deployment-name
 ```
-
-Du kan få din API-nyckel från [OpenAI Platform](https://platform.openai.com/account/api-keys).
 
 ## Körning
 
