@@ -222,7 +222,7 @@ EXAMPEL 1 - OUTPUT:
             "document_title": "Metodanvisning teknisk tjanst inlaga.pdf",
             "section_or_chapter": "Materielunderhåll",
           },
-          "confidence": "high"
+          "confidence": "high",
           "uncertain": false
         }
       ]
