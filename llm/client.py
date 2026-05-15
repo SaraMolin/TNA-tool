@@ -134,6 +134,8 @@ class AzureLLMClient:
         try:
             # Remove markdown code fences if present
             response_text = response_text.strip()
+            
+            # Remove code block markers
             if response_text.startswith("```json"):
                 response_text = response_text[7:]
             elif response_text.startswith("```"):
@@ -144,13 +146,29 @@ class AzureLLMClient:
             
             response_text = response_text.strip()
             
+            # Find and extract JSON object (handles cases where LLM adds text before/after JSON)
+            # Try to find the first '{' and last '}'
+            json_start = response_text.find('{')
+            json_end = response_text.rfind('}')
+            
+            if json_start != -1 and json_end != -1 and json_end > json_start:
+                response_text = response_text[json_start:json_end+1]
+            
+            response_text = response_text.strip()
+            
+            # Sanitize invalid control characters in JSON strings
+            # Replace actual newlines/tabs with escaped versions within the JSON
+            # This handles cases where LLM returns unescaped newlines in string values
+            response_text = response_text.replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t')
+            
             # Parse and return JSON
             parsed = json.loads(response_text)
             return parsed
         
         except json.JSONDecodeError as e:
             print(f"Error parsing LLM response as JSON: {str(e)}")
-            print(f"Raw response: {response_text[:500]}")
+            print(f"Raw response (first 500 chars): {response_text[:500]}")
+            print(f"Full response length: {len(response_text)}")
             return None
         
         except Exception as e:
