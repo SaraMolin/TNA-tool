@@ -1,19 +1,37 @@
 """
-Chunking module — saves preprocessed text sections as readable .txt files.
+Chunking module — processes and saves preprocessed sections as JSON.
 
-Each chunk represents one section at the 1.X level (subsection level).
-Chunks are saved to chunks/<document_title>/ with descriptive filenames.
+Each chunk represents one section from the markdown hierarchy.
+Chunks are saved to chunks/<document_title>/chunks.json as a structured JSON file.
 
-Examples of what gets chunked:
-- 1.1, 1.2, 1.3 (subsections of chapter 1)
-- 2.1, 2.2 (subsections of chapter 2)
-- Eller om ingen numrering: rubrik med två nivåer djuphet
+JSON format:
+{
+  "document_title": "Document Name",
+  "total_chunks": 42,
+  "chunks": [
+    {
+      "chunk_id": 1,
+      "headline": "Kapitel 1 › Avsnitt 1.1",
+      "page_number": 5,
+      "content": "Text from section...",
+      "breadcrumb": ["Kapitel 1", "Avsnitt 1.1"]
+    },
+    ...
+  ]
+}
+
+This JSON format makes it easy to:
+- Load all chunks at once into memory
+- Display in UI with hierarchy structure
+- Send to LLM with metadata preserved
+- Process in batches if needed
 """
 
 import os
 import re
+import json
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Tuple, Dict, Optional
 
 
 CHUNKS_DIR = Path("chunks")
@@ -50,6 +68,29 @@ def detect_heading_level(headline: str) -> int:
     return level
 
 
+def is_warning_section(headline: str) -> bool:
+    """
+    Checks if a heading is a warning/informational section and should be filtered out.
+    
+    Detects sections with:
+    - "varning" / "warning" (Swedish/English warnings)
+    - "OBS" (Swedish abbreviation for "Observera" - Note)
+    
+    These sections are typically informational and not procedural,
+    so they should not be chunked for TNA analysis.
+    
+    Args:
+        headline: the heading text to check
+    
+    Returns:
+        True if this is a warning/informational section, False otherwise
+    """
+    headline_lower = headline.lower()
+    filter_keywords = ["varning", "warning", "varningar", "warnings", "obs"]
+    
+    return any(keyword in headline_lower for keyword in filter_keywords)
+
+
 def should_include_chunk(headline: str) -> bool:
     """
     Determines if a heading should be chunked (only level 1.X subsections).
@@ -57,10 +98,12 @@ def should_include_chunk(headline: str) -> bool:
     Returns True for:
     - Level 2 headings (1.1, 1.2, 2.1, 2.2, etc.)
     - Unnumbered headings (level 0 - treated as subsections when no chapters exist)
+    - AND NOT warning sections
     
     Returns False for:
     - Level 1 headings (1, 2, 3 - main chapters)
     - Level 3+ headings (1.1.1 - too deep)
+    - Warning sections (contain "varning" or "warning")
     
     Args:
         headline: the heading text to check
@@ -68,6 +111,10 @@ def should_include_chunk(headline: str) -> bool:
     Returns:
         Boolean indicating if this heading should become a chunk
     """
+    # Filter out warning sections first
+    if is_warning_section(headline):
+        return False
+    
     level = detect_heading_level(headline)
     
     # Include level 2 (1.1, 1.2) and level 0 (unnumbered)
@@ -125,107 +172,124 @@ def sanitize_filename(text: str, max_length: int = 100) -> str:
 
 def save_chunks(
     document_title: str,
-    sections: List[Tuple[str, int, str]]
-) -> List[str]:
+    sections: List[Dict]
+) -> List[Dict]:
     """
-    Saves preprocessed sections as .txt files in chunks/<document_title>/.
+    Saves preprocessed sections as JSON chunks in chunks/<document_title>/chunks.json.
     
-    Only saves sections at the 1.X level (subsections), skipping:
-    - Main chapter headings (1, 2, 3)
-    - Deeper subsections (1.1.1, 1.2.1)
+    Each section from the markdown preprocessing becomes a chunk with FULL METADATA
+    that matches LLM output format:
     
-    For each 1.X level section, also includes the parent chapter heading (1, 2, 3)
-    in the metadata and filename.
+    Chunk structure:
+    {
+        "chunk_id": 1,
+        "document_filename": "document.pdf",
+        "document_title": "Document Title",
+        "section_or_chapter": "Kapitel 1 › Avsnitt 1.1",
+        "breadcrumb": ["Kapitel 1", "Avsnitt 1.1"],
+        "page_number": 5,
+        "level": 2,
+        "content": "Text från sektion..."
+    }
+    
+    This structure matches the metadata in LLM output format:
+    "traceability": {
+        "document_filename": "document.pdf",
+        "document_title": "Document Title",
+        "section_or_chapter": "Kapitel 1 › Avsnitt 1.1"
+    }
     
     Args:
         document_title: title/identifier of the document
-        sections: list of (headline, page_num, text_block) tuples from preprocessing
+        sections: list of dicts from preprocessing with metadata
     
     Returns:
-        List of saved chunk filenames (only for 1.X level sections)
+        List of chunk dictionaries saved
     """
     doc_chunks_dir = ensure_chunk_directory(document_title)
-    saved_files = []
     
-    # Track the last seen chapter-level heading for context
-    current_chapter_heading = None
-    current_chapter_level = None
+    chunks = []
+    chunk_id = 1
     
-    for idx, (headline, page_num, text_block) in enumerate(sections, start=1):
-        level = detect_heading_level(headline)
-        
-        # Update current chapter if we encounter a level 1 heading
-        if level == 1:
-            current_chapter_heading = headline
-            current_chapter_level = level
-            continue  # Don't save level 1 headings as chunks
-        
-        # Only include sections at the right level (1.1, 1.2, 2.1, etc.)
-        if not should_include_chunk(headline):
+    for section in sections:
+        # Filter out warning sections
+        if is_warning_section(section.get("section_or_chapter", "")):
             continue
         
-        # Build combined headline: "Chapter / Subsection" format
-        if current_chapter_heading:
-            combined_headline = f"{current_chapter_heading} / {headline}"
-        else:
-            # If no parent chapter was found, use the headline as-is
-            combined_headline = headline
+        # Create chunk entry with full metadata
+        chunk = {
+            "chunk_id": chunk_id,
+            "document_filename": section.get("document_filename", ""),
+            "document_title": section.get("document_title", ""),
+            "section_or_chapter": section.get("section_or_chapter", ""),
+            "breadcrumb": section.get("breadcrumb", []),
+            "page_number": section.get("page_number", 0),
+            "level": section.get("level", 0),
+            "content": section.get("content", "")
+        }
         
-        # Create filename from the subsection headline (not the combined one)
-        filename = sanitize_filename(headline)
-        
-        # If filename is empty, use a generic name
-        if not filename or filename == '.txt':
-            filename = f"section_{idx:03d}.txt"
-        
-        # Ensure filename is unique if multiple sections have the same headline
-        file_path = doc_chunks_dir / filename
-        counter = 1
-        base_name, ext = filename.rsplit('.', 1)
-        while file_path.exists():
-            new_filename = f"{base_name}_{counter}.{ext}"
-            file_path = doc_chunks_dir / new_filename
-            counter += 1
-        
-        # Write chunk to file with combined headline
-        with open(file_path, 'w', encoding='utf-8') as f:
-            f.write(f"Rubrik: {combined_headline}\n")
-            f.write(f"Sida: {page_num}\n")
-            f.write(f"{'='*60}\n\n")
-            f.write(text_block)
-        
-        saved_files.append(file_path.name)
+        chunks.append(chunk)
+        chunk_id += 1
     
-    return saved_files
+    # Save all chunks to single JSON file
+    chunks_json = {
+        "document_title": document_title,
+        "total_chunks": len(chunks),
+        "chunks": chunks
+    }
+    
+    chunks_file = doc_chunks_dir / "chunks.json"
+    
+    with open(chunks_file, 'w', encoding='utf-8') as f:
+        json.dump(chunks_json, f, ensure_ascii=False, indent=2)
+    
+    # Return just the list of chunks
+    return chunks
 
 
-def load_chunks(document_title: str) -> List[Tuple[str, str]]:
+def load_chunks(document_title: str) -> List[Dict]:
     """
-    Loads all chunks for a document from disk.
+    Loads all chunks for a document from JSON.
     
     Args:
         document_title: title/identifier of the document
     
     Returns:
-        List of (filename, content) tuples
+        List of chunk dictionaries with structure:
+        [
+          {
+            "chunk_id": 1,
+            "headline": "Kapitel 1 › Avsnitt 1.1",
+            "page_number": 5,
+            "content": "Text...",
+            "breadcrumb": ["Kapitel 1", "Avsnitt 1.1"]
+          },
+          ...
+        ]
     """
     doc_chunks_dir = CHUNKS_DIR / document_title
+    chunks_file = doc_chunks_dir / "chunks.json"
     
-    if not doc_chunks_dir.exists():
+    if not chunks_file.exists():
         return []
     
-    chunks = []
-    for chunk_file in sorted(doc_chunks_dir.glob("*.txt")):
-        with open(chunk_file, 'r', encoding='utf-8') as f:
-            content = f.read()
-            chunks.append((chunk_file.name, content))
+    try:
+        with open(chunks_file, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            return data.get("chunks", [])
     
-    return chunks
+    except json.JSONDecodeError as e:
+        print(f"Error reading chunks JSON for {document_title}: {str(e)}")
+        return []
+    
+    except Exception as e:
+        print(f"Unexpected error loading chunks: {str(e)}")
+        return []
 
 
 def remove_chunks(document_title: str):
     """
-    Removes all chunks for a document from disk.
+    Removes all chunks for a document (deletes chunks.json file).
     
     Args:
         document_title: title/identifier of the document

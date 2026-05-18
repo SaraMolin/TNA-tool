@@ -156,14 +156,27 @@ class AzureLLMClient:
             
             response_text = response_text.strip()
             
-            # Sanitize invalid control characters in JSON strings
-            # Replace actual newlines/tabs with escaped versions within the JSON
-            # This handles cases where LLM returns unescaped newlines in string values
-            response_text = response_text.replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t')
+            # The LLM response may contain unescaped actual newlines in string values.
+            # We need to escape these for valid JSON, but we must be careful not to
+            # double-escape sequences that are already escaped (like \n in the response).
+            # 
+            # Strategy: Use a simple approach - only escape actual control characters,
+            # assuming the LLM produces valid or nearly-valid JSON with proper escaping.
+            # If json.loads fails, we'll retry with more aggressive sanitization.
             
-            # Parse and return JSON
-            parsed = json.loads(response_text)
-            return parsed
+            try:
+                parsed = json.loads(response_text)
+                return parsed
+            except json.JSONDecodeError:
+                # First JSON parse failed. Try sanitizing unescaped control characters.
+                # Only replace actual newlines/tabs/carriage returns (not already-escaped sequences)
+                response_text = response_text.replace('\r\n', '\n')  # Normalize line endings first
+                response_text = response_text.replace('\n', '\\n')   # Escape actual newlines
+                response_text = response_text.replace('\r', '\\r')   # Escape carriage returns
+                response_text = response_text.replace('\t', '\\t')   # Escape tabs
+                
+                parsed = json.loads(response_text)
+                return parsed
         
         except json.JSONDecodeError as e:
             print(f"Error parsing LLM response as JSON: {str(e)}")

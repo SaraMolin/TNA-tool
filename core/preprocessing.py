@@ -1,23 +1,26 @@
 """
-Preprocessing module — cleans PDF text extracted by pdfplumber.
+Preprocessing module — converts PDF to markdown and extracts hierarchical structure.
 
-Preserves original Swedish text without any lowercasing, lemmatization, or stopword removal.
-The LLM needs the original wording for correct output and traceability.
+MARKDOWN-ONLY PIPELINE:
+1. Convert PDF to markdown using pymupdf4llm
+2. Parse markdown to extract H1-H5 hierarchy
+3. Build breadcrumbs (e.g., "Kapitel 1 › Avsnitt 1.1 › Underavsnitt")
+4. Filter warning sections (varning, warning, obs, anm)
+5. Return sections with full hierarchy preserved
 
-Processing steps (in order):
-1. Remove cover page (page 1)
-2. Detect and remove table of contents pages (heuristic: >60% lines match "text ... page_number")
-3. Remove repeated headers and footers (same position on 3+ consecutive pages)
-4. Remove image-only regions (skip text covered by image bounding boxes)
-5. Detect section/chapter boundaries for chunking
+The markdown-based approach provides:
+- Precise heading hierarchy detection
+- Automatic breadcrumb generation
+- Better handling of complex document structures
+- Proper H1-H5 level detection
 
-What preprocessing does NOT do:
-- Does not lowercase, lemmatize, or remove stopwords
-- Does not filter paragraphs by verb presence (reserved for future step 6 with spaCy)
-- Does not modify any Swedish text content — only removes structural noise
+Preserves original Swedish text without:
+- Lowercasing, lemmatization, or stopword removal
+- Modification of any content — only structural extraction
 """
 
 import pdfplumber
+import re
 from typing import List, Tuple, Optional
 from pathlib import Path
 
@@ -75,22 +78,30 @@ def step_1_remove_cover_page(pages: List[dict]) -> List[dict]:
 
 def step_2_detect_and_remove_toc(pages: List[dict]) -> List[dict]:
     """
-    Step 2: Detect and remove table of contents pages.
+    Step 2: Detect and remove table of contents pages and all pages before it.
     
     Heuristic: a page is a ToC if >60% of its lines match the pattern "text ... page_number"
     (i.e. trailing dots followed by a digit or page number).
+    
+    When a ToC is found, removes:
+    - The ToC page itself
+    - ALL pages that come before the ToC page
+    
+    This removes cover pages, preface, introduction, and other front matter that typically
+    precedes the table of contents.
     
     Args:
         pages: list of page dicts
     
     Returns:
-        List of pages with ToC pages removed
+        List of pages starting after the ToC (or original list if no ToC found)
     """
     import re
     
-    result = []
+    # First pass: find the ToC page index
+    toc_page_index = None
     
-    for page in pages:
+    for idx, page in enumerate(pages):
         text = page["text"]
         lines = text.split('\n') if text else []
         
@@ -107,12 +118,17 @@ def step_2_detect_and_remove_toc(pages: List[dict]) -> List[dict]:
             # If >60% of lines match, consider it a ToC page
             ratio = toc_pattern_count / total_lines if total_lines > 0 else 0
             
-            if ratio <= 0.6:
-                result.append(page)
-        else:
-            result.append(page)
+            if ratio > 0.6:
+                toc_page_index = idx
+                break  # Found the ToC, stop looking
     
-    return result
+    # If ToC found, remove it and all pages before it
+    if toc_page_index is not None:
+        # Remove all pages from 0 to toc_page_index (inclusive)
+        return pages[toc_page_index + 1:]
+    
+    # No ToC found, return original pages
+    return pages
 
 
 def step_3_remove_headers_footers(pages: List[dict]) -> List[dict]:
@@ -193,9 +209,118 @@ def step_4_remove_image_regions(pages: List[dict]) -> List[dict]:
     return result
 
 
-def step_5_detect_section_boundaries(pages: List[dict]) -> List[Tuple[str, int, str]]:
+def step_5_remove_image_captions(pages: List[dict]) -> List[dict]:
     """
-    Step 5: Detect section/chapter boundaries for chunking.
+    Step 5: Remove image captions.
+    
+    Detects and removes lines that are image captions, which follow the pattern:
+    - "Bild" or "Figur" (Swedish for "Image" or "Figure")
+    - Followed by optional number/period
+    - Followed by caption text
+    
+    Examples: "Bild 15. Maskinens komponenter", "Figur 3.2 Systemöversikt"
+    
+    Args:
+        pages: list of page dicts
+    
+    Returns:
+        List of pages with image captions removed
+    """
+    result = []
+    
+    for page in pages:
+        text_lines = page["text"].split('\n') if page["text"] else []
+        
+        # Filter out image caption lines
+        filtered_lines = []
+        for line in text_lines:
+            stripped = line.strip()
+            
+            # Match patterns like "Bild 15.", "Figur 3.2", "Bild:", "Figur:", etc.
+            # Pattern: starts with Bild/Figur, followed by optional number/period/colon
+            if not re.match(r'^(Bild|Figur|bild|figur)\s*\d*\.?\d*[\.\:]?\s+', stripped):
+                filtered_lines.append(line)
+        
+        new_page = page.copy()
+        new_page["text"] = '\n'.join(filtered_lines)
+        result.append(new_page)
+    
+    return result
+
+
+def step_5b_remove_tables(pages: List[dict]) -> List[dict]:
+    """
+    Step 5b: Remove table content.
+    
+    Detects and removes lines that appear to be part of tables by identifying:
+    - Lines starting with "Tabell" or "Table" (table captions/labels)
+    - Lines with excessive whitespace or pipe characters (|) indicating table structure
+    - Lines with many aligned columns (multiple tabs or spaces indicating alignment)
+    - Lines that match table separator patterns (===, ---, etc.)
+    
+    Examples: "Tabell 5. Systemöversikt", "Table 3.1 Configuration"
+    
+    Args:
+        pages: list of page dicts
+    
+    Returns:
+        List of pages with table content removed
+    """
+    result = []
+    
+    for page in pages:
+        text_lines = page["text"].split('\n') if page["text"] else []
+        
+        filtered_lines = []
+        
+        for line in text_lines:
+            stripped = line.strip()
+            
+            # Skip empty lines
+            if not stripped:
+                filtered_lines.append(line)
+                continue
+            
+            # Detect table indicators
+            is_table_line = False
+            
+            # Check for table caption/label (same pattern as Bild/Figur)
+            # Matches: "Tabell 5.", "Table 3.2", "Tabell:", "Table:", etc.
+            if re.match(r'^(Tabell|Table|tabell|table)\s*\d*\.?\d*[\.\:]?\s+', stripped):
+                is_table_line = True
+            
+            # Check for pipe characters (common table separator)
+            if '|' in stripped:
+                is_table_line = True
+            
+            # Check for excessive consecutive spaces or tabs (alignment in tables)
+            if re.search(r'[\s]{4,}', stripped):  # 4+ consecutive spaces
+                is_table_line = True
+            
+            # Check for table separator lines (multiple dashes or equals)
+            if re.match(r'^[\s]*[=\-\+]{5,}', stripped):
+                is_table_line = True
+            
+            # Check for lines that look like table headers with many columns
+            # (many short words separated by spaces, common in Swedish table headers)
+            words = stripped.split()
+            if len(words) > 8 and all(len(w) < 15 for w in words):
+                # Could be table header, skip it
+                is_table_line = True
+            
+            if not is_table_line:
+                filtered_lines.append(line)
+        
+        new_page = page.copy()
+        new_page["text"] = '\n'.join(filtered_lines)
+        result.append(new_page)
+    
+    return result
+
+
+def step_7_detect_section_boundaries(pages: List[dict]) -> List[Tuple[str, int, str]]:
+    """
+    Step 7: Detect section/chapter boundaries for chunking.
     
     A line is a headline if it meets 2+ of these criteria:
     - Shorter than 60 characters
@@ -282,42 +407,181 @@ def step_5_detect_section_boundaries(pages: List[dict]) -> List[Tuple[str, int, 
     return sections
 
 
-def preprocess_pdf(pdf_path: str) -> List[Tuple[str, int, str]]:
+def parse_markdown_structure(markdown_text: str, document_filename: str = "", document_title: str = "") -> List[dict]:
     """
-    Full preprocessing pipeline.
+    Parses markdown text to extract hierarchical structure with breadcrumbs and metadata.
     
-    Applies all preprocessing steps in order and returns a list of
-    section tuples ready for chunking.
+    PRIMARY PREPROCESSING PIPELINE:
+    1. Detects H1-H5 headers from markdown
+    2. Builds breadcrumb trails: "Kapitel › Avsnitt › Underavsnitt › Punkt › Underpunkt"
+    3. Filters out warning sections (varning, warning, obs, anm)
+    4. Returns sections with full hierarchy and metadata preserved
+    
+    Metadata structure (matches LLM output format):
+    {
+        "content": "Text från sektion...",
+        "page_number": 5,
+        "section_or_chapter": "Kapitel 1 › Avsnitt 1.1",
+        "breadcrumb": ["Kapitel 1", "Avsnitt 1.1"],
+        "document_filename": "document.pdf",
+        "document_title": "Document Title",
+        "level": 2
+    }
     
     Args:
-        pdf_path: path to PDF file
+        markdown_text: markdown string from pymupdf4llm conversion
+        document_filename: original PDF filename
+        document_title: document title/identifier
     
     Returns:
-        List of (headline, page_num, text_block) tuples
+        List of dicts with metadata and content
     """
-    # Extract text and metadata
-    pages = extract_text_with_pdfplumber(pdf_path)
+    from core.chunking import is_warning_section
     
-    # Step 1: Remove cover page
-    pages = step_1_remove_cover_page(pages)
+    sections = []
+    lines = markdown_text.split('\n')
     
-    # Step 2: Remove table of contents
-    pages = step_2_detect_and_remove_toc(pages)
+    # Header stack to track hierarchy
+    header_stack = {"h1": None, "h2": None, "h3": None, "h4": None, "h5": None}
+    current_content = ""
+    current_header = None
+    current_breadcrumb = []
+    current_page = 1
+    current_level = 0
+    page_counter = 1
     
-    # Step 3: Remove headers/footers
-    pages = step_3_remove_headers_footers(pages)
+    for line in lines:
+        # Detect markdown headers: ^#{1,5}\s+(.+)$
+        match = re.match(r'^(#{1,5})\s+(.+)$', line)
+        
+        if match:
+            header_text = match.group(2).strip()
+            header_level = len(match.group(1))  # 1 for H1, ..., 5 for H5
+            
+            # Skip warning sections
+            if is_warning_section(header_text):
+                # Clear stack for this level and deeper
+                level_keys = ["h1", "h2", "h3", "h4", "h5"]
+                for i in range(header_level - 1, 5):
+                    header_stack[level_keys[i]] = None
+                continue
+            
+            # Save previous section if exists
+            if current_header and current_content.strip():
+                section_dict = {
+                    "content": current_content.strip(),
+                    "page_number": current_page,
+                    "section_or_chapter": current_header,
+                    "breadcrumb": current_breadcrumb,
+                    "document_filename": document_filename,
+                    "document_title": document_title,
+                    "level": current_level
+                }
+                sections.append(section_dict)
+            
+            # Update hierarchy based on header level
+            level_keys = ["h1", "h2", "h3", "h4", "h5"]
+            header_stack[level_keys[header_level - 1]] = header_text
+            
+            # Clear deeper levels
+            for i in range(header_level, 5):
+                header_stack[level_keys[i]] = None
+            
+            # Build breadcrumb array
+            breadcrumbs = []
+            for key in level_keys:
+                if header_stack[key]:
+                    breadcrumbs.append(header_stack[key])
+            
+            current_breadcrumb = breadcrumbs
+            current_header = " › ".join(breadcrumbs) if breadcrumbs else header_text
+            current_page = page_counter
+            current_level = header_level
+            current_content = ""
+        else:
+            # Accumulate content
+            if line.strip():
+                if current_content and not current_content.endswith('\n'):
+                    current_content += '\n'
+                current_content += line
+                
+                # Simple page counter (one page per ~30 lines of content)
+                page_counter = 1 + len(current_content.split('\n')) // 30
     
-    # Step 4: Remove image regions
-    pages = step_4_remove_image_regions(pages)
-    
-    # Step 5: Detect section boundaries
-    sections = step_5_detect_section_boundaries(pages)
+    # Don't forget the last section
+    if current_header and current_content.strip():
+        section_dict = {
+            "content": current_content.strip(),
+            "page_number": current_page,
+            "section_or_chapter": current_header,
+            "breadcrumb": current_breadcrumb,
+            "document_filename": document_filename,
+            "document_title": document_title,
+            "level": current_level
+        }
+        sections.append(section_dict)
     
     return sections
 
 
-# TODO: Step 6 — spaCy verb filter
+def preprocess_pdf(pdf_path: str, document_title: str = "") -> List[dict]:
+    """
+    Full preprocessing pipeline using MARKDOWN ONLY.
+    
+    Uses pymupdf4llm to convert PDF to markdown and extract hierarchical structure
+    with breadcrumbs, warning filtering, and rich metadata.
+    
+    Returns sections enriched with metadata that matches LLM output format:
+    - document_filename: original PDF filename
+    - document_title: document title/identifier
+    - section_or_chapter: breadcrumb hierarchy (e.g., "Kapitel 1 › Avsnitt 1.1")
+    - breadcrumb: array of hierarchy levels
+    - page_number: page where section starts
+    - content: section text
+    - level: heading level (1-5)
+    
+    Args:
+        pdf_path: path to PDF file
+        document_title: document title/identifier (defaults to filename)
+    
+    Returns:
+        List of dicts with metadata and content
+    
+    Raises:
+        ImportError: if pymupdf4llm is not installed
+        Exception: if PDF conversion fails
+    """
+    from core.markdown_converter import pdf_to_markdown, clean_markdown
+    from pathlib import Path
+    
+    pdf_path_obj = Path(pdf_path)
+    document_filename = pdf_path_obj.name
+    
+    # Use provided title or derive from filename
+    if not document_title:
+        document_title = pdf_path_obj.stem
+    
+    # Convert PDF to markdown (mandatory, no fallback)
+    md_text = pdf_to_markdown(pdf_path)
+    
+    if not md_text:
+        raise Exception(f"Failed to convert PDF to markdown: {pdf_path}")
+    
+    # Clean markdown output
+    md_text = clean_markdown(md_text)
+    
+    # Parse markdown structure with metadata
+    sections = parse_markdown_structure(
+        md_text,
+        document_filename=document_filename,
+        document_title=document_title
+    )
+    
+    return sections
+
+
+# TODO: Step 8 — spaCy verb filter
 # After evaluating baseline output quality, may add a spaCy-based filter (sv_core_news_sm)
 # to exclude paragraphs containing zero Swedish imperative or infinitive verbs.
-# This should be added as a new function step_6_filter_by_verbs() between step 4 and 5.
+# This should be added as a new function step_8_filter_by_verbs() between step 5b and 7.
 # Do not implement now — keep this comment visible for future reference.
