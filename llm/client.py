@@ -77,7 +77,7 @@ class AzureLLMClient:
                 "max_completion_tokens": max_tokens,  # GPT-5.4 parameter
             }
             
-            response = requests.post(url, headers=headers, json=payload, timeout=120)
+            response = requests.post(url, headers=headers, json=payload, timeout=600)
             response.raise_for_status()
             
             result = response.json()
