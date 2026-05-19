@@ -25,10 +25,10 @@ VALID_DOCUMENT_TYPES = [
 
 # Swedish names for display
 DOCUMENT_TYPE_LABELS = {
-    DOC_TYPE_INSTRUKTIONSBOK: "Instruktionsbok (Operation/instruction manuals)",
-    DOC_TYPE_REGLEMENTE: "Reglemente (Regulations, doctrine, field manuals)",
-    DOC_TYPE_HANDBOK: "Handbok (Reference handbooks, theory)",
-    DOC_TYPE_REPARATIONSBOK: "Reparationsbok (Maintenance and repair procedures)",
+    DOC_TYPE_INSTRUKTIONSBOK: "Instruktionsbok",
+    DOC_TYPE_REGLEMENTE: "Reglemente",
+    DOC_TYPE_HANDBOK: "Handbok",
+    DOC_TYPE_REPARATIONSBOK: "Reparationsbok",
 }
 
 

@@ -68,8 +68,19 @@ def render_main_content():
     """
     Renders the main content area with two columns.
     """
-    # Create two-column layout
-    left_col, right_col = st.columns([1, 2])
+    # Initialize PDF viewer visibility state
+    if "show_pdf_viewer" not in st.session_state:
+        st.session_state.show_pdf_viewer = True
+    
+    # Determine column layout based on PDF viewer visibility
+    if st.session_state.show_pdf_viewer:
+        # Create two-column layout
+        # Left column (analysis results): 2/3, Right column (PDF viewer): 1/3
+        left_col, right_col = st.columns([2, 1])
+    else:
+        # Single column for analysis results only
+        left_col = st.container()
+        right_col = None
     
     with left_col:
         st.subheader("Analysresultat")
@@ -91,8 +102,24 @@ def render_main_content():
         else:
             st.info("Kör en analys för att se resultat.")
     
-    with right_col:
-        pdf_viewer.render_pdf_viewer()
+    if st.session_state.show_pdf_viewer and right_col is not None:
+        with right_col:
+            # Toggle button for PDF viewer
+            col1, col2 = st.columns([5, 1])
+            with col2:
+                if st.button("✕", key="close_pdf_viewer", help="Stäng PDF-visare"):
+                    st.session_state.show_pdf_viewer = False
+                    st.rerun()
+            
+            with col1:
+                pass  # Spacer for layout
+            
+            pdf_viewer.render_pdf_viewer()
+    else:
+        # Show button to open PDF viewer when closed
+        if st.button("📄 Öppna PDF-visare", use_container_width=True):
+            st.session_state.show_pdf_viewer = True
+            st.rerun()
 
 
 def main():
