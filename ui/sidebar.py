@@ -161,8 +161,15 @@ def render_run_analysis_button():
                 doc_title = doc["document_title"]
                 chunks = chunking.load_chunks(doc_title)
                 
-                for chunk_filename, chunk_content in chunks:
-                    all_chunks_text += f"\n\n--- {doc_title}: {chunk_filename} ---\n{chunk_content}"
+                # Format chunks for LLM with metadata
+                # Format: --- Document: Section › Subsection (Sida N) ---
+                #         Chunk Content
+                for chunk in chunks:
+                    section_or_chapter = chunk.get("section_or_chapter", "Unknown")
+                    content = chunk.get("content", "")
+                    page_num = chunk.get("page_number", "?")
+                    
+                    all_chunks_text += f"\n\n--- {doc_title}: {section_or_chapter} (Sida {page_num}) ---\n{content}"
             
             if not all_chunks_text.strip():
                 st.error("Ingen textinnehål hittades i dokumenten.")
@@ -185,7 +192,7 @@ def render_run_analysis_button():
                     system_prompt=system_prompt,
                     user_message=user_prompt,
                     temperature=0.3,
-                    max_tokens=4096
+                    max_tokens=16384  # Increased from 4096 to handle large responses
                 )
             
             if result_json is None:
