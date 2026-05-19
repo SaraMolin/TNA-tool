@@ -6,10 +6,23 @@ with preserved heading hierarchy (H1, H2, H3, etc.) and structure,
 making it easier to parse document hierarchy and create breadcrumbs.
 
 TABLE FILTERING:
-After conversion, detects and removes table content from markdown by identifying:
+After conversion, detects and removes table content from markdown using TWO detection methods:
+
+METHOD 1 (PRIMARY): detect_and_remove_tables()
 - Markdown table format (with pipes |)
-- Table-like patterns (multiple aligned columns)
-- Repeated short lines that look like table rows
+- Table separator lines (--- or === patterns)
+- Table captions ("Tabell N.", "Table N.")
+- Consecutive lines that look like table rows
+
+METHOD 2 (SECONDARY): detect_and_remove_aligned_tables()
+- Lines with excessive whitespace (aligned columns)
+- Repeated short consecutive lines (table rows pattern)
+- Lines with many numeric values
+- CSV-like patterns (many commas/semicolons)
+- Fixed-width column patterns
+
+Both methods are applied sequentially to catch tables that may be missed
+by either method alone (comprehensive table removal).
 """
 
 from typing import Optional
@@ -20,14 +33,130 @@ import re
 logger = logging.getLogger(__name__)
 
 
+def detect_and_remove_aligned_tables(markdown_text: str) -> str:
+    """
+    Removes aligned/formatted tables from markdown text using pattern detection.
+    
+    This is an ALTERNATIVE/ADDITIONAL detection method that catches tables
+    that may be missed by the primary detect_and_remove_tables() method.
+    
+    Detects tables by identifying:
+    1. Lines with excessive whitespace (aligned columns pattern)
+    2. Lines that are short but repeat multiple consecutive lines
+    3. Lines with many numeric/alphanumeric values in sequence
+    4. CSV-like patterns (many commas or semicolons)
+    5. Fixed-width column patterns (aligned pipes without markdown formatting)
+    
+    This catches tables formatted as:
+    - Aligned text columns (fixed-width spacing)
+    - Tab-separated values
+    - Repeated short lines (table rows)
+    - Space-aligned numerical data
+    
+    Called by: pdf_to_markdown() as secondary table detection
+    
+    Args:
+        markdown_text: raw markdown from pymupdf4llm
+    
+    Returns:
+        Markdown with aligned/formatted tables removed
+    """
+    lines = markdown_text.split('\n')
+    filtered_lines = []
+    i = 0
+    
+    while i < len(lines):
+        line = lines[i]
+        stripped = line.strip()
+        
+        # Skip empty lines (preserve them)
+        if not stripped:
+            filtered_lines.append(line)
+            i += 1
+            continue
+        
+        # PATTERN 1: Lines with many consecutive tabs or large spaces (aligned columns)
+        # Example: "Value1    Value2    Value3" or "Col1\tCol2\tCol3"
+        if re.search(r'[\t]{2,}', line) or re.search(r'[\s]{8,}', stripped):
+            # This looks like aligned columns - skip it
+            i += 1
+            continue
+        
+        # PATTERN 2: Detect series of repeated short lines (table rows pattern)
+        # Count consecutive lines that are all short (< 60 chars) and similar length
+        if len(stripped) < 60 and len(stripped) > 5:
+            # Look ahead to see if there are multiple similar short lines
+            consecutive_short = 1
+            j = i + 1
+            
+            while j < len(lines) and consecutive_short < 5:  # Look ahead max 5 lines
+                next_stripped = lines[j].strip()
+                
+                # If next line is empty, table might be ending
+                if not next_stripped:
+                    break
+                
+                # If next line is heading (starts with #), table is ending
+                if next_stripped.startswith('#'):
+                    break
+                
+                # If next line has similar length (within 20% variance) and is short
+                length_variance = abs(len(next_stripped) - len(stripped)) / len(stripped)
+                if length_variance < 0.3 and len(next_stripped) < 60:
+                    consecutive_short += 1
+                    j += 1
+                else:
+                    break
+            
+            # If we found 3+ consecutive short lines of similar length, skip this table block
+            if consecutive_short >= 3:
+                # Skip all those lines
+                i = j
+                continue
+        
+        # PATTERN 3: Lines with many numeric values (numerical tables)
+        # Example: "12  34  56  78  90" or "1.2, 3.4, 5.6"
+        # Count digits and separators
+        digit_count = len(re.findall(r'\d', stripped))
+        separator_count = len(re.findall(r'[,;:]', stripped))
+        
+        # If line has many digits relative to length, it might be numerical data
+        if len(stripped) > 20 and digit_count > len(stripped) * 0.3:
+            # Could be numerical table data
+            # Check if there are many spaces suggesting columns
+            space_groups = len(re.findall(r'[\s]{2,}', stripped))
+            if space_groups >= 3 or separator_count >= 3:
+                i += 1
+                continue
+        
+        # PATTERN 4: CSV-like patterns (many commas or semicolons)
+        # Example: "Value1, Value2, Value3, Value4"
+        if separator_count >= 4 and len(stripped.split(',')) > 4:
+            # Looks like CSV data, skip it
+            i += 1
+            continue
+        
+        # Keep this line (not a table)
+        filtered_lines.append(line)
+        i += 1
+    
+    return '\n'.join(filtered_lines)
+
+
 def detect_and_remove_tables(markdown_text: str) -> str:
     """
-    Removes table content from markdown text.
+    PRIMARY METHOD: Removes table content from markdown text.
+    
+    This is the PRIMARY detection method. Used together with detect_and_remove_aligned_tables()
+    for comprehensive table removal.
     
     Detects tables by:
     1. Markdown table format (lines with | pipes in actual table data)
     2. Table separator lines (--- or === patterns)
-    3. Consecutive lines that look like table rows
+    3. Table captions ("Tabell N.", "Table N.")
+    4. Consecutive lines that look like table rows
+    
+    Called by: pdf_to_markdown() as primary table detection (method 1 of 2)
     
     Args:
         markdown_text: raw markdown from pymupdf4llm
@@ -105,12 +234,15 @@ def pdf_to_markdown(pdf_path: str) -> Optional[str]:
     
     Process:
     1. Convert PDF to markdown using pymupdf4llm
-    2. Remove table content from markdown
-    3. Preserve document structure with heading levels (H1-H6)
+    2. Remove table content using PRIMARY detection method (pipes, separators, captions)
+    3. Remove table content using SECONDARY detection method (aligned columns, patterns)
+    4. Preserve document structure with heading levels (H1-H6)
     
-    This approach (remove tables AFTER conversion) is more reliable than
-    pre-processing the PDF, as it works with any PDF format and doesn't
-    require additional libraries beyond what's already used.
+    This dual-method approach (remove tables AFTER conversion with 2 detection strategies)
+    is more reliable than pre-processing the PDF, as it:
+    - Works with any PDF format
+    - Catches both markdown-formatted tables and aligned/formatted tables
+    - Doesn't require additional libraries beyond what's already used
     
     Args:
         pdf_path: path to the PDF file
@@ -135,9 +267,13 @@ def pdf_to_markdown(pdf_path: str) -> Optional[str]:
             logger.warning(f"PDF conversion returned empty result: {pdf_path}")
             return None
         
-        # Remove tables from markdown
-        logger.info(f"Removing tables from markdown content")
+        # METHOD 1: Remove tables using primary detection (pipes, separators, captions)
+        logger.info(f"Removing tables (METHOD 1: PRIMARY - pipes/captions)")
         md_text = detect_and_remove_tables(md_text)
+        
+        # METHOD 2: Remove tables using secondary detection (aligned columns, patterns)
+        logger.info(f"Removing tables (METHOD 2: SECONDARY - aligned/formatted)")
+        md_text = detect_and_remove_aligned_tables(md_text)
         
         logger.info(f"Successfully converted PDF to markdown: {pdf_path.name}")
         return md_text
