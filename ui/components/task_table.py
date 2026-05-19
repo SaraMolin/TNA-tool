@@ -42,7 +42,12 @@ def get_confidence_color(confidence: str) -> Optional[str]:
 
 def render_task_table(tasks: List[Dict]):
     """
-    Renders the full task hierarchy table using Streamlit columns.
+    Renders the full task hierarchy table in hierarchical format.
+    
+    Structure:
+    - Task row (bold): Task ID | Task | Subtask | Step | Traceability
+    - Subtask row: | | Subtask ID + Subtask text | | Traceability
+    - Step row: | | | Step ID + Step text | Traceability
     
     Args:
         tasks: List of task dicts from LLM output
@@ -53,19 +58,19 @@ def render_task_table(tasks: List[Dict]):
         st.info("Ingen analys tillgänglig ännu. Ladda upp dokument och kör analys.")
         return
     
-    # Create table headers
-    col1, col2, col3, col4, col5 = st.columns([1, 3, 2, 1, 0.5])
+    # Create table headers with proper column widths
+    col1, col2, col3, col4, col5 = st.columns([0.8, 2, 2, 2, 2.5])
     
     with col1:
-        st.write("**Kod**")
+        st.write("**Task ID**")
     with col2:
-        st.write("**Beskrivning**")
+        st.write("**Task**")
     with col3:
-        st.write("**Traceability**")
+        st.write("**Subtask**")
     with col4:
-        st.write("**Confidence**")
+        st.write("**Step**")
     with col5:
-        st.write("**Flag**")
+        st.write("**Traceability**")
     
     st.divider()
     
@@ -74,98 +79,80 @@ def render_task_table(tasks: List[Dict]):
         task_id = task.get("task_id", "")
         task_text = task.get("task", "")
         
-        # Task row
-        col1, col2, col3, col4, col5 = st.columns([1, 3, 2, 1, 0.5])
-        
-        with col1:
-            st.write(f"**{task_id}**")
-        with col2:
-            st.write(f"**{task_text}**")
-        with col3:
-            st.write("")
-        with col4:
-            st.write("")
-        with col5:
-            st.write("")
-        
         # Render subtasks
         subtasks = task.get("subtasks", [])
-        for subtask in subtasks:
+        for subtask_idx, subtask in enumerate(subtasks):
             subtask_id = subtask.get("subtask_id", "")
             subtask_text = subtask.get("subtask", "")
-            confidence = subtask.get("confidence", "high")
-            uncertain = subtask.get("uncertain", False)
             traceability = subtask.get("traceability", {})
             
-            # Check if this subtask is flagged
-            is_flagged = subtask_id in st.session_state.flagged_subtasks
-            
-            # Get background color based on confidence
-            bg_color = get_confidence_color(confidence)
-            
-            # Create a container with background color if needed
-            if bg_color:
-                st.markdown(f"""
-                <div style="background-color: {bg_color}; padding: 10px; border-radius: 5px; margin: 5px 0;">
-                """, unsafe_allow_html=True)
-            
-            col1, col2, col3, col4, col5 = st.columns([1, 3, 2, 1, 0.5])
-            
-            with col1:
-                st.write(f"→ {subtask_id}")
-            
-            with col2:
-                # Show uncertain warning if applicable
-                uncertain_marker = " ⚠️" if uncertain else ""
-                st.write(f"{subtask_text}{uncertain_marker}")
-            
-            with col3:
-                # Display traceability
-                doc_title = traceability.get("document_title", "")
-                doc_file = traceability.get("document_filename", "")
-                section = traceability.get("section_or_chapter", "")
-                
-                trace_text = f"{doc_title}\n{doc_file}\n{section}"
-                st.caption(trace_text)
-            
-            with col4:
-                # Display confidence as text/badge
-                conf_text = f"🟢 {confidence}" if confidence == "high" else \
-                           f"🟡 {confidence}" if confidence == "medium" else \
-                           f"🔴 {confidence}"
-                st.write(conf_text)
-            
-            with col5:
-                # Flag button
-                flag_label = "🚩" if is_flagged else "🏳️"
-                if st.button(flag_label, key=f"flag_{subtask_id}"):
-                    if is_flagged:
-                        st.session_state.flagged_subtasks.discard(subtask_id)
-                    else:
-                        st.session_state.flagged_subtasks.add(subtask_id)
-                    st.rerun()
-            
-            if bg_color:
-                st.markdown("</div>", unsafe_allow_html=True)
+            # Get traceability text
+            doc_title = traceability.get("document_title", "")
+            doc_file = traceability.get("document_filename", "")
+            section = traceability.get("section_or_chapter", "")
+            trace_text = f"{doc_title}: {doc_file} {section}"
             
             # Render steps for this subtask
             steps = subtask.get("steps", [])
-            for step in steps:
-                step_id = step.get("step_id", "")
-                step_text = step.get("step", "")
-                
-                col1, col2, col3, col4, col5 = st.columns([1, 3, 2, 1, 0.5])
+            
+            if steps:
+                # If there are steps, render first step with task/subtask info
+                for step_idx, step in enumerate(steps):
+                    step_id = step.get("step_id", "")
+                    step_text = step.get("step", "")
+                    
+                    col1, col2, col3, col4, col5 = st.columns([0.8, 2, 2, 2, 2.5])
+                    
+                    with col1:
+                        # Show task_id only on first subtask
+                        if step_idx == 0 and subtask_idx == 0:
+                            st.write(f"**{task_id}**")
+                        else:
+                            st.write("")
+                    
+                    with col2:
+                        # Show task text only on first subtask/step
+                        if step_idx == 0 and subtask_idx == 0:
+                            st.write(f"**{task_text}**")
+                        else:
+                            st.write("")
+                    
+                    with col3:
+                        # Show subtask only on first step of this subtask
+                        if step_idx == 0:
+                            st.write(f"{subtask_id}: {subtask_text}")
+                        else:
+                            st.write("")
+                    
+                    with col4:
+                        st.write(f"{step_id}: {step_text}")
+                    
+                    with col5:
+                        st.write(trace_text)
+            else:
+                # No steps, just show subtask row
+                col1, col2, col3, col4, col5 = st.columns([0.8, 2, 2, 2, 2.5])
                 
                 with col1:
-                    st.write(f"  → {step_id}")
+                    if subtask_idx == 0:
+                        st.write(f"**{task_id}**")
+                    else:
+                        st.write("")
+                
                 with col2:
-                    st.write(step_text)
+                    if subtask_idx == 0:
+                        st.write(f"**{task_text}**")
+                    else:
+                        st.write("")
+                
                 with col3:
-                    st.write("")
+                    st.write(f"{subtask_id}: {subtask_text}")
+                
                 with col4:
                     st.write("")
+                
                 with col5:
-                    st.write("")
+                    st.write(trace_text)
         
         st.divider()
 

@@ -2,7 +2,8 @@
 Sidebar module — left panel with upload controls, document management, and run analysis button.
 
 Handles:
-- PDF file uploader
+- PDF file         with col3:
+            if st.button("🗑️", key=f"remove_{doc_id}", use_container_width=True, type="primary"):loader
 - Document type selection (dropdown)
 - Document list with remove buttons
 - "Run Analysis" button
@@ -25,38 +26,41 @@ def render_upload_section():
     """
     st.subheader("Ladda upp dokument")
     
+    # Check if we should clear the uploader
+    if "clear_uploader" not in st.session_state:
+        st.session_state.clear_uploader = False
+    
     uploaded_file = st.file_uploader(
         "Välj en PDF-fil",
         type="pdf",
-        label_visibility="collapsed"
+        label_visibility="collapsed",
+        key=f"file_uploader_{st.session_state.get('uploader_key', 0)}"
     )
     
     if uploaded_file is not None:
-        # Document type selection
+        # Document type selection (required)
         doc_type = st.selectbox(
             "Dokumenttyp",
-            options=classifier.VALID_DOCUMENT_TYPES,
-            format_func=classifier.get_document_type_label,
-            key="doc_type_select"
+            options=[None] + classifier.VALID_DOCUMENT_TYPES,
+            format_func=lambda x: "Välj dokumenttyp..." if x is None else classifier.get_document_type_label(x),
+            key=f"doc_type_select_{st.session_state.get('uploader_key', 0)}"
         )
         
-        # Optional custom title
-        custom_title = st.text_input(
-            "Dokumenttitel (valfritt, använder filnamn annars)",
-            label_visibility="collapsed"
-        )
-        
-        # Confirm button
-        if st.button("Bekräfta och ladda upp", use_container_width=True):
+        # Confirm button - only enabled if document type is selected
+        if st.button("Bekräfta och ladda upp", use_container_width=True, type="primary", disabled=(doc_type is None)):
+            if doc_type is None:
+                st.error("Du måste välja en dokumenttyp innan du laddar upp.")
+                return
+            
             try:
                 # Ensure directories exist
                 ingestion.ensure_directories()
                 
-                # Save the PDF
+                # Save the PDF (use filename as title since custom title was removed)
                 doc_name, doc_title, file_path = ingestion.save_uploaded_pdf(
                     uploaded_file,
                     doc_type,
-                    custom_title if custom_title else None
+                    None
                 )
                 
                 # Register document
@@ -79,6 +83,8 @@ def render_upload_section():
                     document_registry.update_document_status(doc_id, "completed", chunks_saved)
                     
                     st.success(f"{doc_title} laddat upp och bearbetat!")
+                    # Reset the uploader by incrementing the key
+                    st.session_state.uploader_key = st.session_state.get('uploader_key', 0) + 1
                     st.rerun()
                 
                 except Exception as e:
@@ -97,7 +103,7 @@ def render_document_list():
     """
     Renders the list of uploaded documents with remove buttons.
     """
-    st.subheader("📋 Uppladdade dokument")
+    st.subheader("Uppladdade dokument")
     
     all_docs = document_registry.get_all_documents()
     
@@ -106,21 +112,18 @@ def render_document_list():
         return
     
     for doc_id, doc in all_docs.items():
-        col1, col2, col3 = st.columns([2, 1, 1])
+        col1, col2 = st.columns([3, 1])
         
         with col1:
-            status_icon = "✅" if doc["status"] == "completed" else \
+            status_icon = "✓" if doc["status"] == "completed" else \
                          "⏳" if doc["status"] == "processing" else \
-                         "❌" if doc["status"] == "error" else "📄"
+                         "✕" if doc["status"] == "error" else "📄"
             
             st.write(f"{status_icon} {doc['document_title']}")
             st.caption(f"Typ: {classifier.get_document_type_label(doc['document_type'])}")
         
         with col2:
-            st.caption(doc["status"])
-        
-        with col3:
-            if st.button("🗑️", key=f"remove_{doc_id}", use_container_width=True):
+            if st.button("✕", key=f"remove_{doc_id}", use_container_width=True, type="secondary"):
                 try:
                     # Remove files
                     ingestion.remove_document(
@@ -220,7 +223,7 @@ def render_download_excel_button():
     """
     Renders the Excel download button when analysis results exist.
     """
-    if "analysis_result" not in st.session_state:
+    if "analysis_result" not in st.session_state or st.session_state.analysis_result is None:
         return
 
     st.subheader("Ladda ner resultat")
@@ -235,11 +238,12 @@ def render_download_excel_button():
             excel_bytes = generate_excel(tasks)
             
             st.download_button(
-                label="⬇️ Ladda ner Excel-fil",
+                label="⬇ Ladda ner Excel-fil",
                 data=excel_bytes,
                 file_name="TNA_Analysis.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True
+                use_container_width=True,
+                type="primary"
             )
     
     except Exception as e:

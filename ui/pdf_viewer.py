@@ -55,20 +55,18 @@ def render_pdf_viewer():
     st.write("**Välj dokument:**")
     
     for doc_id, doc in all_docs.items():
-        col1, col2 = st.columns([4, 1])
+        # Only selected document uses primary styling, others use secondary
+        is_selected = doc_id == st.session_state.selected_pdf_doc_id
+        button_type = "primary" if is_selected else "secondary"
         
-        with col1:
-            if st.button(
-                doc["document_title"],
-                key=f"pdf_select_{doc_id}",
-                use_container_width=True
-            ):
-                st.session_state.selected_pdf_doc_id = doc_id
-        
-        with col2:
-            # Show status indicator
-            status_icon = "✅" if doc["status"] == "completed" else "⏳"
-            st.caption(status_icon)
+        if st.button(
+            doc["document_title"],
+            key=f"pdf_select_{doc_id}",
+            use_container_width=True,
+            type=button_type
+        ):
+            st.session_state.selected_pdf_doc_id = doc_id
+            st.rerun()
     
     st.divider()
     
