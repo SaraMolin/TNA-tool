@@ -1,7 +1,5 @@
 """
-Prompt för Handbok (Reference handbooks, theory)
-
-Handboken innehåller referensmaterial, teoretisk bakgrund och kunskapsöversikter.
+Prompt för Handbok 
 """
 
 SYSTEM_PROMPT_HANDBOK = """
@@ -163,72 +161,72 @@ funktionskontroller då FU genomförs som t.ex. under TOLO,
 återhämtning eller på reparationsplats.
 
 EXAMPEL 1 - OUTPUT:
-{
+{{
   "tasks": [
-    {
+    {{
       "task": "Materialunderhåll",
       "task_id": "01-00-00",
       "subtasks": [
-        {
+        {{
           "subtask": "Förebyggande underhåll",
           "subtask_id": "01-01-00",
           "steps": [
-            {
+            {{
               "step": "Teknisk chef vid respektive förband ger anvisningar/order för brukarens förebyggande underhåll i samråd med bandschefen",
               "step_id": "01-01-01"
-            },
-            {
+            }},
+            {{
               "step": "Boka rutinmässigt upp certifierade resurser från högre nivå vid grundtillsyn samt trafiksäkerhetskontroll",
               "step_id": "01-01-02"
-            },
-            {
+            }},
+            {{
               "step": "Vid behov ange materielslagsvisa eller förbandsvisa prioriteringar",
               "step_id": "01-01-03"
-            },
-            {
+            }},
+            {{
               "step": "Klarlägg hur teknisk personal ska nyttjas och eventuellt begära understöd av högre chef",
               "step_id": "01-01-04"
-            },
-            {
+            }},
+            {{
               "step": "Direktiv för förebyggande underhåll inarbetas så långt det är möjligt som rutiner i förbandets stående order",
               "step_id": "01-01-05"
-            },
-            {
+            }},
+            {{
               "step": "Planera förebyggande underhåll utefter beordran",
               "step_id": "01-01-06"
-            },
-            {
+            }},
+            {{
               "step": "Genomföra förebyggande underhåll",
               "step_id": "01-01-05"
-            },
-            {
+            }},
+            {{
               "step": "Följa upp förebyggande underhåll fortlöpande under genomförandet",
               "step_id": "01-01-07"
-            },
-	          {
+            }},
+	          {{
               "step": "Säkerställ och kontrollera att alla satser som erfordras för förebyggande underhåll är kompletta.",
               "step_id": "01-01-08"
-            },
-            {
+            }},
+            {{
               "step": "Klarlägg, förbered och genomför i samråd med kvartermästaren erforderlig ersättning av reservmateriel och vårdmateriel",
               "step_id": "01-01-09"
-            },
-            {
+            }},
+            {{
               "step": "Avdela och led teknisk personal för kontroll samt funktionskontroller då förebyggande underhåll genomförs ",
               "step_id": "01-01-10"
-            }
+            }}
           ],
-          "traceability": {
+          "traceability": {{
             "document_title": "Metodanvisning teknisk tjanst inlaga.pdf",
-            "section_or_chapter": "Materielunderhåll",
-          },
+            "section_or_chapter": "Materielunderhåll"
+          }},
           "confidence": "high",
           "uncertain": false
-        }
+        }}
       ]
-    }
+    }}
   ]
-}
+}}
 
 EXEMPEL 2 - INPUT:
 Tekniskt Systemstöd
@@ -255,7 +253,6 @@ Genomförande
 
 
 NU ANALYSERA DENNA TEXT:
-Texten från handboken:
 {chunks_text}
 
 Returnera ENDAST JSON enligt detta schema. Alla fält måste finnas (inga tomma strängar):

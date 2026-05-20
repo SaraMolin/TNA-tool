@@ -199,7 +199,12 @@ def render_run_analysis_button():
                 )
             
             if result_json is None:
-                st.error("Misslyckades att få svar från AI-modellen.")
+                st.error("❌ Misslyckades att få svar från AI-modellen. Kontrollera konsolen för detaljerade felmeddelanden.")
+                return
+            
+            # Validate that result has expected structure
+            if "tasks" not in result_json:
+                st.error("❌ AI-svaret saknar 'tasks'-fält. Kontrollera konsolen för detaljerade felmeddelanden.")
                 return
             
             # Save result to session state and file

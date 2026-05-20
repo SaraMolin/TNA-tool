@@ -160,29 +160,54 @@ class AzureLLMClient:
             # We need to escape these for valid JSON, but we must be careful not to
             # double-escape sequences that are already escaped (like \n in the response).
             # 
-            # Strategy: Use a simple approach - only escape actual control characters,
-            # assuming the LLM produces valid or nearly-valid JSON with proper escaping.
-            # If json.loads fails, we'll retry with more aggressive sanitization.
+            # Strategy: Use a multi-pass approach:
+            # 1. First try to parse as-is (in case it's valid JSON)
+            # 2. If that fails, sanitize control characters and retry
             
             try:
                 parsed = json.loads(response_text)
                 return parsed
-            except json.JSONDecodeError:
+            except json.JSONDecodeError as first_error:
                 # First JSON parse failed. Try sanitizing unescaped control characters.
-                # Only replace actual newlines/tabs/carriage returns (not already-escaped sequences)
-                response_text = response_text.replace('\r\n', '\n')  # Normalize line endings first
-                response_text = response_text.replace('\n', '\\n')   # Escape actual newlines
-                response_text = response_text.replace('\r', '\\r')   # Escape carriage returns
-                response_text = response_text.replace('\t', '\\t')   # Escape tabs
+                # We need to be careful: only escape actual control characters within string values,
+                # not the ones already escaped in the JSON.
                 
-                parsed = json.loads(response_text)
-                return parsed
-        
-        except json.JSONDecodeError as e:
-            print(f"Error parsing LLM response as JSON: {str(e)}")
-            print(f"Raw response (first 500 chars): {response_text[:500]}")
-            print(f"Full response length: {len(response_text)}")
-            return None
+                # Strategy: Process character by character, tracking if we're inside a string
+                sanitized = []
+                in_string = False
+                prev_char = ''
+                
+                for char in response_text:
+                    # Track if we're inside a string (handle escaped quotes)
+                    if char == '"' and prev_char != '\\':
+                        in_string = not in_string
+                        sanitized.append(char)
+                    # Only escape actual control characters inside strings
+                    elif in_string and char == '\n':
+                        sanitized.append('\\n')
+                    elif in_string and char == '\r':
+                        sanitized.append('\\r')
+                    elif in_string and char == '\t':
+                        sanitized.append('\\t')
+                    else:
+                        sanitized.append(char)
+                    
+                    prev_char = char
+                
+                response_text = ''.join(sanitized)
+                
+                try:
+                    parsed = json.loads(response_text)
+                    return parsed
+                except json.JSONDecodeError as second_error:
+                    # If sanitization also failed, provide detailed error info
+                    print(f"\n=== JSON PARSING ERROR ===")
+                    print(f"First parse attempt error: {str(first_error)}")
+                    print(f"Second parse attempt (after sanitization) error: {str(second_error)}")
+                    print(f"\nFull response (length {len(response_text)} chars):")
+                    print(response_text)
+                    print(f"\n=== END ERROR ===\n")
+                    return None
         
         except Exception as e:
             print(f"Unexpected error parsing JSON: {str(e)}")
