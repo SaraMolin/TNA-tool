@@ -207,7 +207,7 @@ def render_section_selector():
         selected_index = section_names.index(selected_name)
         selected_id = section_ids[selected_index]
         document_registry.set_selected_section(doc_id, selected_id)
-        st.caption(f"📍 Analyserar sektion: **{selected_name}**")
+        st.caption(f"Analyserar sektion: **{selected_name}**")
 
 
 def render_run_analysis_button():
@@ -252,32 +252,34 @@ def render_run_analysis_button():
                 st.error(f"Inga chunks hittades för sektion {selected_section_id}.")
                 return
             
-            # Format chunks for LLM with metadata
-            all_chunks_text = ""
-            for chunk in section_chunks:
-                section_or_chapter = chunk.get("section_or_chapter", "Unknown")
-                content = chunk.get("content", "")
-                page_num = chunk.get("page_number", "?")
-                
-                all_chunks_text += f"\n\n--- {doc_title}: {section_or_chapter} (Sida {page_num}) ---\n{content}"
-            
-            if not all_chunks_text.strip():
+            # Serialize chunks as JSON array with full metadata intact
+            chunks_payload = json.dumps(section_chunks, ensure_ascii=False, indent=2)
+
+            if not chunks_payload.strip():
                 st.error("Ingen textinnehål hittades i vald sektion.")
                 return
-            
-            # Limit input size for safety (same as before)
+
+            # Limit input size for safety — truncate at chunk boundaries to keep valid JSON
             max_chars = 50000
-            if len(all_chunks_text) > max_chars:
-                st.warning(f"⚠️ Sektionen är stor. Analyserar de första {max_chars} tecknen för att säkerställa korrekt JSON-output.")
-                all_chunks_text = all_chunks_text[:max_chars]
-            
+            if len(chunks_payload) > max_chars:
+                truncated = []
+                total_len = 0
+                for c in section_chunks:
+                    c_str = json.dumps(c, ensure_ascii=False)
+                    if total_len + len(c_str) > max_chars:
+                        break
+                    truncated.append(c)
+                    total_len += len(c_str)
+                chunks_payload = json.dumps(truncated, ensure_ascii=False, indent=2)
+                st.warning(f"⚠️ Sektionen är stor. Analyserar {len(truncated)}/{len(section_chunks)} chunks för att säkerställa korrekt JSON-output.")
+
             # Get document type from primary document
             doc_type = primary_doc["document_type"]
-            
+
             # Get prompts
             system_prompt, user_prompt = classifier.get_prompt_for_document_type(
                 doc_type,
-                all_chunks_text
+                chunks_payload
             )
             
             # Call LLM
