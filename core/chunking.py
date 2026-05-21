@@ -385,35 +385,38 @@ def get_level2_sections(document_title: str) -> List[Dict[str, str]]:
 
 def get_chunks_for_section(document_title: str, section_id: str) -> List[Dict]:
     """
-    Filters and returns only chunks that belong to a specific level-2 section.
-    
+    Filters and returns only chunks that belong to a specific level-2 section,
+    including all subsections.
+
     Args:
         document_title: title/identifier of the document
         section_id: the level-2 section ID (e.g., "5", "6" or "Allmänt")
-    
+
     Returns:
         List of chunk dictionaries that belong to the given section_id
     """
     chunks = load_chunks(document_title)
-    
+
     if not chunks or not section_id:
         return chunks
-    
+
+    section_id_clean = str(section_id).strip()
     filtered = []
+
     for chunk in chunks:
         breadcrumb = chunk.get("breadcrumb", [])
-        
-        # Extract first level from breadcrumb (same logic as get_level2_sections)
-        # If breadcrumb has items, first item is the L2 section
-        if breadcrumb and len(breadcrumb) > 0:
-            chunk_section_id = breadcrumb[0].strip()
-        else:
-            # Fallback if no breadcrumb
-            section_or_chapter = chunk.get("section_or_chapter", "")
-            chunk_section_id = str(section_or_chapter).split("›")[0].strip() if "›" in str(section_or_chapter) else str(section_or_chapter)
-        
-        # Check if this chunk belongs to the requested section
-        if chunk_section_id == str(section_id).strip():
+        section_or_chapter = str(chunk.get("section_or_chapter", ""))
+
+        # Match if any breadcrumb item equals the selected section
+        breadcrumb_match = any(
+            item.strip() == section_id_clean
+            for item in breadcrumb
+        )
+
+        # Also match if section_or_chapter contains the selected section
+        soc_match = section_id_clean in section_or_chapter
+
+        if breadcrumb_match or soc_match:
             filtered.append(chunk)
-    
+
     return filtered

@@ -74,7 +74,7 @@ def render_pdf_viewer():
     selected_doc_id = st.session_state.selected_pdf_doc_id
     
     if selected_doc_id not in all_docs:
-        st.warning("Valtt dokument inte längre tillgängligt.")
+        st.warning("Valt dokument inte längre tillgängligt.")
         return
     
     selected_doc = all_docs[selected_doc_id]

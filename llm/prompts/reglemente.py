@@ -282,8 +282,15 @@ EXAMPEL 1 - OUTPUT:
   ]
 }}
 
-NU ANALYSERA DENNA TEXT:
+NU ANALYSERA DESSA CHUNKS (i JSON-format):
 {chunks_text}
+
+Instruktioner för analys av chunks:
+- Chunks är redan strukturerade i JSON-format med metadata
+- Varje chunk har: chunk_id, document_filename, document_title, section_or_chapter, breadcrumb, page_number, level, content
+- Läs innehållet från "content"-fältet i varje chunk
+- Använd "section_or_chapter" och "breadcrumb" för att förstå dokumenthierarkin
+- Se till att alla chunks från denna sektion analyseras
 
 Returnera ENDAST JSON enligt detta schema. Alla fält måste finnas (inga tomma strängar):
 
