@@ -151,18 +151,18 @@ def render_section_selector():
     """
     import re
     
+    st.subheader("Välj analysomfång")
+
     all_docs = document_registry.get_all_documents()
     completed_docs = [d for d in all_docs.values() if d["status"] == "completed"]
-    
+
     if not completed_docs:
         return
-    
+
     # Use the first (primary) completed document
     primary_doc = completed_docs[0]
     doc_id = primary_doc["document_id"]
     doc_title = primary_doc["document_title"]
-    
-    st.subheader("Välj analysomfång")
     
     # Load available sections from the document's chunks
     sections = chunking.get_level2_sections(doc_title)
@@ -196,18 +196,18 @@ def render_section_selector():
     
     # Render dropdown
     selected_name = st.selectbox(
-        "Sektion att analysera",
+        "Kapitel att analysera",
         options=section_names,
         index=current_index,
         key=f"section_selector_{doc_id}"
     )
-    
+
     # Save selection to registry
     if selected_name:
         selected_index = section_names.index(selected_name)
         selected_id = section_ids[selected_index]
         document_registry.set_selected_section(doc_id, selected_id)
-        st.caption(f"Analyserar sektion: **{selected_name}**")
+        st.caption(f"Analyserar kapitel: **{selected_name}**")
 
 
 def render_run_analysis_button():
