@@ -423,10 +423,11 @@ def parse_markdown_structure(markdown_text: str, document_filename: str = "", do
             for i in range(header_level, 5):
                 header_stack[level_keys[i]] = None
             
-            # Build breadcrumb array
+            # Build breadcrumb array (skip H1 - only include H2 and deeper)
             breadcrumbs = []
-            for key in level_keys:
-                if header_stack[key]:
+            for i, key in enumerate(level_keys):
+                # Skip h1 (index 0) - we don't want the top-level header in breadcrumbs
+                if i > 0 and header_stack[key]:
                     breadcrumbs.append(header_stack[key])
             
             current_breadcrumb = breadcrumbs
