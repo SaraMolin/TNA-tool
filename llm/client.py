@@ -45,7 +45,7 @@ class AzureLLMClient:
         system_prompt: str,
         user_message: str,
         temperature: float = 0.3,
-        max_tokens: int = 4096
+        max_tokens: int = 65536
     ) -> Optional[str]:
         """
         Sends a prompt to the LLM and returns the response using REST API.
@@ -106,8 +106,8 @@ class AzureLLMClient:
         self,
         system_prompt: str,
         user_message: str,
-        temperature: float = 0.3,
-        max_tokens: int = 4096
+        temperature: float = 0.1,
+        max_tokens: int = 65536
     ) -> Optional[dict]:
         """
         Sends a prompt and parses the response as JSON.

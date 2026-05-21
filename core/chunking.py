@@ -300,3 +300,102 @@ def remove_chunks(document_title: str):
     
     if doc_chunks_dir.exists():
         shutil.rmtree(doc_chunks_dir)
+
+
+def get_level2_sections(document_title: str) -> List[Dict[str, str]]:
+    """
+    Extracts all unique level-2 sections from a document's chunks.
+    
+    Level-2 sections are identified by the first number in section_or_chapter.
+    E.g., "5" from "5.1", "5.1.2", etc.
+    
+    Args:
+        document_title: title/identifier of the document
+    
+    Returns:
+        List of dicts with structure:
+        [
+          {"section_id": "5", "section_name": "5. Handhavande"},
+          {"section_id": "6", "section_name": "6. Vård och kontroll"},
+          ...
+        ]
+        Sorted by section_id (numerically where possible)
+    """
+    chunks = load_chunks(document_title)
+    
+    if not chunks:
+        return []
+    
+    # Extract unique level-2 sections (first number in hierarchy)
+    sections = {}
+    
+    for chunk in chunks:
+        section_or_chapter = chunk.get("section_or_chapter", "Unknown")
+        
+        # Extract first level (e.g., "5" from "5.1.2")
+        # Split by "." and take the first part
+        parts = str(section_or_chapter).split(".")
+        level_2_id = parts[0].strip()
+        
+        # Skip if already seen
+        if level_2_id in sections:
+            continue
+        
+        # Try to extract a readable name from the section_or_chapter
+        # Format might be "5" or "5.1" or "5. Rubrik" etc
+        # For now, use the chunk's headline or section_or_chapter as name
+        headline = chunk.get("headline", section_or_chapter)
+        
+        # Extract just the first part with the heading text
+        # E.g., "5. Handhavande" from "5 › 5.1 › Handhavande"
+        if "›" in headline:
+            # Take only the first part
+            first_part = headline.split("›")[0].strip()
+            section_name = first_part
+        else:
+            section_name = f"{level_2_id}. {headline[:50]}"  # Add section_id prefix if missing
+        
+        sections[level_2_id] = section_name
+    
+    # Sort numerically (convert to int if possible, otherwise alphabetically)
+    try:
+        sorted_ids = sorted(sections.keys(), key=lambda x: float(x))
+    except ValueError:
+        sorted_ids = sorted(sections.keys())
+    
+    return [
+        {"section_id": sid, "section_name": sections[sid]}
+        for sid in sorted_ids
+    ]
+
+
+def get_chunks_for_section(document_title: str, section_id: str) -> List[Dict]:
+    """
+    Filters and returns only chunks that belong to a specific level-2 section.
+    
+    Args:
+        document_title: title/identifier of the document
+        section_id: the level-2 section ID (e.g., "5", "6")
+    
+    Returns:
+        List of chunk dictionaries that start with the given section_id
+    """
+    chunks = load_chunks(document_title)
+    
+    if not chunks or not section_id:
+        return chunks
+    
+    filtered = []
+    for chunk in chunks:
+        section_or_chapter = chunk.get("section_or_chapter", "")
+        
+        # Check if this chunk belongs to the requested section
+        # It matches if section_or_chapter starts with "section_id."
+        # or equals section_id exactly
+        section_parts = str(section_or_chapter).split(".")
+        chunk_level_2 = section_parts[0].strip()
+        
+        if chunk_level_2 == str(section_id).strip():
+            filtered.append(chunk)
+    
+    return filtered

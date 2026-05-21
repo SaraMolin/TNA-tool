@@ -141,6 +141,50 @@ def render_document_list():
                     st.error(f"Fel vid borttagning: {str(e)}")
 
 
+def render_section_selector():
+    """
+    Renders a dropdown to select which level-2 section to analyze.
+    Only shown if at least one document is completed.
+    """
+    all_docs = document_registry.get_all_documents()
+    completed_docs = [d for d in all_docs.values() if d["status"] == "completed"]
+    
+    if not completed_docs:
+        return
+    
+    # Use the first (primary) completed document
+    primary_doc = completed_docs[0]
+    doc_id = primary_doc["document_id"]
+    doc_title = primary_doc["document_title"]
+    
+    st.subheader("Välj analysomfång")
+    
+    # Load available sections from the document's chunks
+    sections = chunking.get_level2_sections(doc_title)
+    
+    if not sections:
+        st.info("Inga analyseringar sektioner hittades i dokumentet.")
+        return
+    
+    # Create dropdown options
+    section_options = {s["section_name"]: s["section_id"] for s in sections}
+    current_selection = document_registry.get_selected_section(doc_id)
+    
+    # Render dropdown
+    selected_name = st.selectbox(
+        "Sektion att analysera",
+        options=list(section_options.keys()),
+        index=list(section_options.values()).index(current_selection) if current_selection in section_options.values() else 0,
+        key=f"section_selector_{doc_id}"
+    )
+    
+    # Save selection to registry
+    if selected_name:
+        selected_id = section_options[selected_name]
+        document_registry.set_selected_section(doc_id, selected_id)
+        st.caption(f"📍 Analyserar sektion: **{selected_name}**")
+
+
 def render_run_analysis_button():
     """
     Renders the "Run Analysis" button.
@@ -157,30 +201,53 @@ def render_run_analysis_button():
     
     if st.button("Kör analys", use_container_width=True, type="primary"):
         try:
-            # Collect chunks from all completed documents
-            all_chunks_text = ""
+            # Get the primary (first) completed document
+            all_docs = document_registry.get_all_documents()
+            completed_docs = [d for d in all_docs.values() if d["status"] == "completed"]
             
-            for doc in completed_docs:
-                doc_title = doc["document_title"]
-                chunks = chunking.load_chunks(doc_title)
-                
-                # Format chunks for LLM with metadata
-                # Format: --- Document: Section › Subsection (Sida N) ---
-                #         Chunk Content
-                for chunk in chunks:
-                    section_or_chapter = chunk.get("section_or_chapter", "Unknown")
-                    content = chunk.get("content", "")
-                    page_num = chunk.get("page_number", "?")
-                    
-                    all_chunks_text += f"\n\n--- {doc_title}: {section_or_chapter} (Sida {page_num}) ---\n{content}"
-            
-            if not all_chunks_text.strip():
-                st.error("Ingen textinnehål hittades i dokumenten.")
+            if not completed_docs:
+                st.error("Inga bearbetade dokument tillgängliga.")
                 return
             
-            # Get document type from first document (assuming uniform type for now)
-            # TODO: Future enhancement — handle mixed document types
-            doc_type = completed_docs[0]["document_type"]
+            primary_doc = completed_docs[0]
+            doc_id = primary_doc["document_id"]
+            doc_title = primary_doc["document_title"]
+            
+            # Get selected section
+            selected_section_id = document_registry.get_selected_section(doc_id)
+            
+            if not selected_section_id:
+                st.error("Välj en sektion innan du analyserar.")
+                return
+            
+            # Load chunks for the selected section only
+            section_chunks = chunking.get_chunks_for_section(doc_title, selected_section_id)
+            
+            if not section_chunks:
+                st.error(f"Inga chunks hittades för sektion {selected_section_id}.")
+                return
+            
+            # Format chunks for LLM with metadata
+            all_chunks_text = ""
+            for chunk in section_chunks:
+                section_or_chapter = chunk.get("section_or_chapter", "Unknown")
+                content = chunk.get("content", "")
+                page_num = chunk.get("page_number", "?")
+                
+                all_chunks_text += f"\n\n--- {doc_title}: {section_or_chapter} (Sida {page_num}) ---\n{content}"
+            
+            if not all_chunks_text.strip():
+                st.error("Ingen textinnehål hittades i vald sektion.")
+                return
+            
+            # Limit input size for safety (same as before)
+            max_chars = 50000
+            if len(all_chunks_text) > max_chars:
+                st.warning(f"⚠️ Sektionen är stor. Analyserar de första {max_chars} tecknen för att säkerställa korrekt JSON-output.")
+                all_chunks_text = all_chunks_text[:max_chars]
+            
+            # Get document type from primary document
+            doc_type = primary_doc["document_type"]
             
             # Get prompts
             system_prompt, user_prompt = classifier.get_prompt_for_document_type(
@@ -266,6 +333,10 @@ def render_sidebar():
         st.divider()
         
         render_document_list()
+        st.divider()
+        
+        # NEW: Section selector between document list and analysis button
+        render_section_selector()
         st.divider()
         
         render_run_analysis_button()

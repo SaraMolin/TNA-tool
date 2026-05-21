@@ -54,6 +54,7 @@ def register_document(
         "file_path": file_path,
         "status": "pending",
         "chunks_saved": [],
+        "selected_section": None,  # NEW: Track selected section for analysis
         "created_at": datetime.now().isoformat(),
         "error_message": None,
     }
@@ -170,4 +171,34 @@ def get_document_type(document_id: str) -> Optional[str]:
     doc = get_document(document_id)
     if doc:
         return doc["document_type"]
+    return None
+
+
+def set_selected_section(document_id: str, section_id: Optional[str]):
+    """
+    Sets the selected section for a document.
+    
+    Args:
+        document_id: unique document ID
+        section_id: the section ID to select (e.g., "5"), or None to clear
+    """
+    init_registry()
+    
+    if document_id in st.session_state.document_registry:
+        st.session_state.document_registry[document_id]["selected_section"] = section_id
+
+
+def get_selected_section(document_id: str) -> Optional[str]:
+    """
+    Gets the selected section for a document.
+    
+    Args:
+        document_id: unique document ID
+    
+    Returns:
+        Selected section ID, or None if not set
+    """
+    doc = get_document(document_id)
+    if doc:
+        return doc.get("selected_section")
     return None
