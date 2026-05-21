@@ -145,7 +145,12 @@ def render_section_selector():
     """
     Renders a dropdown to select which level-2 section to analyze.
     Only shown if at least one document is completed.
+    
+    For sections with numeric headers (e.g., "2. Vård"), shows only those with a digit.
+    For sections without numeric headers (pure text), shows all sections as before.
     """
+    import re
+    
     all_docs = document_registry.get_all_documents()
     completed_docs = [d for d in all_docs.values() if d["status"] == "completed"]
     
@@ -166,21 +171,41 @@ def render_section_selector():
         st.info("Inga analyseringar sektioner hittades i dokumentet.")
         return
     
-    # Create dropdown options
-    section_options = {s["section_name"]: s["section_id"] for s in sections}
+    # Create dropdown options as lists to preserve order
+    section_names = [s["section_name"] for s in sections]
+    section_ids = [s["section_id"] for s in sections]
+    
+    # Check if there are any numeric sections
+    has_numeric_sections = any(re.search(r'\d', name) for name in section_names)
+    
+    # If there are numeric sections, filter to show only those with digits
+    if has_numeric_sections:
+        filtered_sections = [(name, sid) for name, sid in zip(section_names, section_ids) if re.search(r'\d', name)]
+        if filtered_sections:
+            section_names, section_ids = zip(*filtered_sections)
+            section_names = list(section_names)
+            section_ids = list(section_ids)
+    
     current_selection = document_registry.get_selected_section(doc_id)
+    
+    # Find the correct index by section_id
+    try:
+        current_index = section_ids.index(current_selection) if current_selection in section_ids else 0
+    except (ValueError, IndexError):
+        current_index = 0
     
     # Render dropdown
     selected_name = st.selectbox(
         "Sektion att analysera",
-        options=list(section_options.keys()),
-        index=list(section_options.values()).index(current_selection) if current_selection in section_options.values() else 0,
+        options=section_names,
+        index=current_index,
         key=f"section_selector_{doc_id}"
     )
     
     # Save selection to registry
     if selected_name:
-        selected_id = section_options[selected_name]
+        selected_index = section_names.index(selected_name)
+        selected_id = section_ids[selected_index]
         document_registry.set_selected_section(doc_id, selected_id)
         st.caption(f"📍 Analyserar sektion: **{selected_name}**")
 

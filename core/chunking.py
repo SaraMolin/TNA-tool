@@ -326,42 +326,56 @@ def get_level2_sections(document_title: str) -> List[Dict[str, str]]:
     if not chunks:
         return []
     
-    # Extract unique level-2 sections (first number in hierarchy)
+    # Extract unique level-2 sections from breadcrumb
     sections = {}
+    section_order = []  # Track order of appearance in document
+    seen_sections = set()  # Track which sections we've already added
     
     for chunk in chunks:
         section_or_chapter = chunk.get("section_or_chapter", "Unknown")
+        breadcrumb = chunk.get("breadcrumb", [])
         
-        # Extract first level (e.g., "5" from "5.1.2")
-        # Split by "." and take the first part
-        parts = str(section_or_chapter).split(".")
-        level_2_id = parts[0].strip()
+        # Extract first level from breadcrumb (skipping H1 which was removed)
+        # If breadcrumb has items, first item is the L2 section
+        # E.g., from breadcrumb ["1. Säkerhet", "1.1 Definitioner"], use "1. Säkerhet"
+        if breadcrumb and len(breadcrumb) > 0:
+            section_name = breadcrumb[0].strip()
+            level_2_id = section_name
+        else:
+            # Fallback if no breadcrumb
+            section_name = str(section_or_chapter).split("›")[0].strip() if "›" in str(section_or_chapter) else str(section_or_chapter)
+            level_2_id = section_name
         
         # Skip if already seen
-        if level_2_id in sections:
+        if level_2_id in seen_sections:
             continue
         
-        # Try to extract a readable name from the section_or_chapter
-        # Format might be "5" or "5.1" or "5. Rubrik" etc
-        # For now, use the chunk's headline or section_or_chapter as name
-        headline = chunk.get("headline", section_or_chapter)
-        
-        # Extract just the first part with the heading text
-        # E.g., "5. Handhavande" from "5 › 5.1 › Handhavande"
-        if "›" in headline:
-            # Take only the first part
-            first_part = headline.split("›")[0].strip()
-            section_name = first_part
-        else:
-            section_name = f"{level_2_id}. {headline[:50]}"  # Add section_id prefix if missing
+        # Track the order of appearance in the document
+        section_order.append(level_2_id)
+        seen_sections.add(level_2_id)
         
         sections[level_2_id] = section_name
     
-    # Sort numerically (convert to int if possible, otherwise alphabetically)
-    try:
-        sorted_ids = sorted(sections.keys(), key=lambda x: float(x))
-    except ValueError:
-        sorted_ids = sorted(sections.keys())
+    # Separate headers into numeric and non-numeric
+    numeric_ids = []
+    non_numeric_ids = []
+    
+    for sid in section_order:
+        if re.search(r'\d', sid):
+            numeric_ids.append(sid)
+        else:
+            non_numeric_ids.append(sid)
+    
+    # Sort numeric headers numerically
+    if numeric_ids:
+        try:
+            numeric_ids = sorted(numeric_ids, key=lambda x: float(x))
+        except ValueError:
+            numeric_ids = sorted(numeric_ids)
+    
+    # Non-numeric headers stay in document order
+    # Combine: non-numeric first, then numeric
+    sorted_ids = non_numeric_ids + numeric_ids
     
     return [
         {"section_id": sid, "section_name": sections[sid]}
@@ -375,10 +389,10 @@ def get_chunks_for_section(document_title: str, section_id: str) -> List[Dict]:
     
     Args:
         document_title: title/identifier of the document
-        section_id: the level-2 section ID (e.g., "5", "6")
+        section_id: the level-2 section ID (e.g., "5", "6" or "Allmänt")
     
     Returns:
-        List of chunk dictionaries that start with the given section_id
+        List of chunk dictionaries that belong to the given section_id
     """
     chunks = load_chunks(document_title)
     
@@ -387,15 +401,19 @@ def get_chunks_for_section(document_title: str, section_id: str) -> List[Dict]:
     
     filtered = []
     for chunk in chunks:
-        section_or_chapter = chunk.get("section_or_chapter", "")
+        breadcrumb = chunk.get("breadcrumb", [])
+        
+        # Extract first level from breadcrumb (same logic as get_level2_sections)
+        # If breadcrumb has items, first item is the L2 section
+        if breadcrumb and len(breadcrumb) > 0:
+            chunk_section_id = breadcrumb[0].strip()
+        else:
+            # Fallback if no breadcrumb
+            section_or_chapter = chunk.get("section_or_chapter", "")
+            chunk_section_id = str(section_or_chapter).split("›")[0].strip() if "›" in str(section_or_chapter) else str(section_or_chapter)
         
         # Check if this chunk belongs to the requested section
-        # It matches if section_or_chapter starts with "section_id."
-        # or equals section_id exactly
-        section_parts = str(section_or_chapter).split(".")
-        chunk_level_2 = section_parts[0].strip()
-        
-        if chunk_level_2 == str(section_id).strip():
+        if chunk_section_id == str(section_id).strip():
             filtered.append(chunk)
     
     return filtered
