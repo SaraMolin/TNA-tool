@@ -60,6 +60,27 @@ def configure_page():
             [data-testid="stSidebar"] {
                 background-color: #f0f2f6;
             }
+            /* Push sidebar content to the very top */
+            [data-testid="stSidebarContent"] {
+                padding-top: 0 !important;
+            }
+            [data-testid="stSidebarContent"] > div:first-child {
+                margin-top: 0 !important;
+            }
+            [data-testid="block-container"] {
+                padding-top: 2rem !important;
+            }
+            /* Make PDF column sticky and viewport-height */
+            [data-testid="stHorizontalBlock"] {
+                align-items: flex-start !important;
+            }
+            [data-testid="stHorizontalBlock"] > [data-testid="column"]:last-child {
+                position: sticky !important;
+                top: 0 !important;
+                max-height: 100vh !important;
+                overflow-y: auto !important;
+                align-self: flex-start !important;
+            }
         </style>
     """, unsafe_allow_html=True)
 

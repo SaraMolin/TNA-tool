@@ -96,7 +96,8 @@ def render_pdf_viewer():
         <iframe
             src="data:application/pdf;base64,{pdf_base64}"
             width="100%"
-            height="800"
+            height="calc(100vh - 220px)"
+            style="min-height:600px; display:block;"
             type="application/pdf"
         ></iframe>
         """

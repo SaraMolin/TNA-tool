@@ -9,6 +9,7 @@ Shows tasks → subtasks → steps with:
 Flagged subtasks are tracked in session_state and highlighted.
 """
 
+import html as html_lib
 import streamlit as st
 from typing import List, Dict, Optional
 
@@ -42,119 +43,92 @@ def get_confidence_color(confidence: str) -> Optional[str]:
 
 def render_task_table(tasks: List[Dict]):
     """
-    Renders the full task hierarchy table in hierarchical format.
-    
-    Structure:
-    - Task row (bold): Task ID | Task | Subtask | Step | Traceability
-    - Subtask row: | | Subtask ID + Subtask text | | Traceability
-    - Step row: | | | Step ID + Step text | Traceability
-    
+    Renders the full task hierarchy table in staircase format.
+
+    Each level gets its own row:
+    - Task row:    ID=task_id    | Task text | (empty)        | (empty)     | (empty)
+    - Subtask row: ID=subtask_id | (empty)   | Subtask text   | (empty)     | Traceability
+    - Step row:    ID=step_id    | (empty)   | (empty)        | Step text   | (empty)
+
     Args:
         tasks: List of task dicts from LLM output
     """
     init_flagged_subtasks()
-    
+
     if not tasks:
         st.info("Ingen analys tillgänglig ännu. Ladda upp dokument och kör analys.")
         return
-    
-    # Create table headers with proper column widths
-    col1, col2, col3, col4, col5 = st.columns([0.8, 2, 2, 2, 2.5])
-    
-    with col1:
-        st.write("**Task ID**")
-    with col2:
-        st.write("**Task**")
-    with col3:
-        st.write("**Subtask**")
-    with col4:
-        st.write("**Step**")
-    with col5:
-        st.write("**Traceability**")
-    
-    st.divider()
-    
-    # Render tasks and their subtasks
+
+    def e(text: str) -> str:
+        return html_lib.escape(str(text))
+
+    def td(content: str, bold: bool = False) -> str:
+        inner = f"<strong>{content}</strong>" if bold else content
+        return f'<td style="padding:8px 12px; vertical-align:top;">{inner}</td>'
+
+    TASK_BG    = "#C8C8C8"
+    SUBTASK_BG = "#E8E8E8"
+    STEP_BG    = "#FFFFFF"
+
+    rows = []
     for task in tasks:
-        task_id = task.get("task_id", "")
-        task_text = task.get("task", "")
-        
-        # Render subtasks
-        subtasks = task.get("subtasks", [])
-        for subtask_idx, subtask in enumerate(subtasks):
-            subtask_id = subtask.get("subtask_id", "")
-            subtask_text = subtask.get("subtask", "")
+        task_id   = e(task.get("task_id", ""))
+        task_text = e(task.get("task", ""))
+
+        rows.append(
+            f'<tr style="background:{TASK_BG};">'
+            + td(task_id, bold=True)
+            + td(task_text, bold=True)
+            + td("") + td("") + td("")
+            + "</tr>"
+        )
+
+        for subtask in task.get("subtasks", []):
+            subtask_id   = e(subtask.get("subtask_id", ""))
+            subtask_text = e(subtask.get("subtask", ""))
             traceability = subtask.get("traceability", {})
-            
-            # Get traceability text
-            doc_title = traceability.get("document_title", "")
-            doc_file = traceability.get("document_filename", "")
-            section = traceability.get("section_or_chapter", "")
-            trace_text = f"{doc_title}: {doc_file} {section}"
-            
-            # Render steps for this subtask
-            steps = subtask.get("steps", [])
-            
-            if steps:
-                # If there are steps, render first step with task/subtask info
-                for step_idx, step in enumerate(steps):
-                    step_id = step.get("step_id", "")
-                    step_text = step.get("step", "")
-                    
-                    col1, col2, col3, col4, col5 = st.columns([0.8, 2, 2, 2, 2.5])
-                    
-                    with col1:
-                        # Show task_id only on first subtask
-                        if step_idx == 0 and subtask_idx == 0:
-                            st.write(f"**{task_id}**")
-                        else:
-                            st.write("")
-                    
-                    with col2:
-                        # Show task text only on first subtask/step
-                        if step_idx == 0 and subtask_idx == 0:
-                            st.write(f"**{task_text}**")
-                        else:
-                            st.write("")
-                    
-                    with col3:
-                        # Show subtask only on first step of this subtask
-                        if step_idx == 0:
-                            st.write(f"{subtask_id}: {subtask_text}")
-                        else:
-                            st.write("")
-                    
-                    with col4:
-                        st.write(f"{step_id}: {step_text}")
-                    
-                    with col5:
-                        st.write(trace_text)
-            else:
-                # No steps, just show subtask row
-                col1, col2, col3, col4, col5 = st.columns([0.8, 2, 2, 2, 2.5])
-                
-                with col1:
-                    if subtask_idx == 0:
-                        st.write(f"**{task_id}**")
-                    else:
-                        st.write("")
-                
-                with col2:
-                    if subtask_idx == 0:
-                        st.write(f"**{task_text}**")
-                    else:
-                        st.write("")
-                
-                with col3:
-                    st.write(f"{subtask_id}: {subtask_text}")
-                
-                with col4:
-                    st.write("")
-                
-                with col5:
-                    st.write(trace_text)
-        
-        st.divider()
+            trace_text   = e(
+                f"{traceability.get('document_filename', '')} "
+                f"{traceability.get('section_or_chapter', '')}"
+            )
+
+            rows.append(
+                f'<tr style="background:{SUBTASK_BG};">'
+                + td(subtask_id)
+                + td("") + td(subtask_text) + td("")
+                + td(trace_text)
+                + "</tr>"
+            )
+
+            for step in subtask.get("steps", []):
+                step_id   = e(step.get("step_id", ""))
+                step_text = e(step.get("step", ""))
+
+                rows.append(
+                    f'<tr style="background:{STEP_BG};">'
+                    + td(step_id)
+                    + td("") + td("") + td(step_text) + td("")
+                    + "</tr>"
+                )
+
+    header_style = "padding:8px 12px; text-align:left; border-bottom:2px solid #999; background:#F5F5F5;"
+    html = f"""
+    <table style="width:100%; border-collapse:collapse; font-size:14px;">
+      <thead>
+        <tr>
+          <th style="{header_style} width:9%;">ID</th>
+          <th style="{header_style} width:22%;">Task</th>
+          <th style="{header_style} width:22%;">Subtask</th>
+          <th style="{header_style} width:22%;">Step</th>
+          <th style="{header_style} width:25%;">Traceability</th>
+        </tr>
+      </thead>
+      <tbody>
+        {"".join(rows)}
+      </tbody>
+    </table>
+    """
+    st.markdown(html, unsafe_allow_html=True)
 
 
 def get_flagged_subtasks() -> set:
