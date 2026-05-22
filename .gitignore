@@ -2,6 +2,7 @@
 uploads/
 chunks/
 output/
+goldlabels/
 __pycache__/
 *.pyc
 .venv/
