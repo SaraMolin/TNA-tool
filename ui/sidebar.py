@@ -260,7 +260,7 @@ def render_run_analysis_button():
                 return
 
             # Limit input size for safety — truncate at chunk boundaries to keep valid JSON
-            max_chars = 50000
+            max_chars = 25000
             if len(chunks_payload) > max_chars:
                 truncated = []
                 total_len = 0
@@ -289,7 +289,7 @@ def render_run_analysis_button():
                     system_prompt=system_prompt,
                     user_message=user_prompt,
                     temperature=0.3,
-                    max_tokens=16384  # Increased from 4096 to handle large responses
+                    max_tokens=65536  # Increased from 4096 to handle large responses
                 )
             
             if result_json is None:
