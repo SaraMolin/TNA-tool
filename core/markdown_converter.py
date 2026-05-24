@@ -309,11 +309,19 @@ def clean_markdown(markdown_text: str) -> str:
     
     for line in lines:
         stripped = line.strip()
-        
+
         # Skip image references
         if stripped.startswith('!['):
             continue
-        
+
+        # Skip separator lines consisting entirely of dots
+        if re.match(r'^\.*$', stripped) and len(stripped) >= 5:
+            continue
+
+        # Skip dot-leader lines (spec/TOC format: "Label......Value")
+        if re.search(r'\.{5,}', stripped) and not stripped.startswith('#'):
+            continue
+
         # Remove excessive blank lines (max 1 consecutive blank)
         if not stripped:
             if not prev_blank:

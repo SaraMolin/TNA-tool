@@ -385,23 +385,27 @@ def parse_markdown_structure(markdown_text: str, document_filename: str = "", do
     current_page = 1
     current_level = 0
     page_counter = 1
-    
+    skip_content = False  # True while inside a VARNING block
+
     for line in lines:
         # Detect markdown headers: ^#{1,5}\s+(.+)$
-        match = re.match(r'^(#{1,5})\s+(.+)$', line)
-        
+        match = re.match(r'^(#{1,6})\s+(.+)$', line)
+
         if match:
             header_text = match.group(2).strip()
             header_level = len(match.group(1))  # 1 for H1, ..., 5 for H5
-            
+
             # Skip warning sections
             if is_warning_section(header_text):
                 # Clear stack for this level and deeper
-                level_keys = ["h1", "h2", "h3", "h4", "h5"]
-                for i in range(header_level - 1, 5):
+                level_keys = ["h1", "h2", "h3", "h4", "h5", "h6"]
+                for i in range(header_level - 1, 6):
                     header_stack[level_keys[i]] = None
+                skip_content = True
                 continue
-            
+
+            skip_content = False
+
             # Save previous section if exists
             if current_header and current_content.strip():
                 section_dict = {
@@ -414,34 +418,44 @@ def parse_markdown_structure(markdown_text: str, document_filename: str = "", do
                     "level": current_level
                 }
                 sections.append(section_dict)
-            
+
             # Update hierarchy based on header level
-            level_keys = ["h1", "h2", "h3", "h4", "h5"]
+            level_keys = ["h1", "h2", "h3", "h4", "h5", "h6"]
             header_stack[level_keys[header_level - 1]] = header_text
-            
+
             # Clear deeper levels
-            for i in range(header_level, 5):
+            for i in range(header_level, 6):
                 header_stack[level_keys[i]] = None
-            
+
             # Build breadcrumb array (skip H1 - only include H2 and deeper)
             breadcrumbs = []
             for i, key in enumerate(level_keys):
                 # Skip h1 (index 0) - we don't want the top-level header in breadcrumbs
                 if i > 0 and header_stack[key]:
                     breadcrumbs.append(header_stack[key])
-            
+
             current_breadcrumb = breadcrumbs
             current_header = " › ".join(breadcrumbs) if breadcrumbs else header_text
             current_page = page_counter
             current_level = header_level
             current_content = ""
         else:
-            # Accumulate content
             if line.strip():
+                stripped_line = line.strip()
+
+                # Handle H6 VARNING headings (not captured by #{1,5} regex above)
+                if re.match(r'^#{6}\s+', stripped_line) and is_warning_section(stripped_line.lstrip('#').strip()):
+                    skip_content = True
+                    continue
+
+                if skip_content:
+                    continue
+
+                # Accumulate content
                 if current_content and not current_content.endswith('\n'):
                     current_content += '\n'
                 current_content += line
-                
+
                 # Simple page counter (one page per ~30 lines of content)
                 page_counter = 1 + len(current_content.split('\n')) // 30
     

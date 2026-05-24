@@ -86,7 +86,7 @@ def is_warning_section(headline: str) -> bool:
         True if this is a warning/informational section, False otherwise
     """
     headline_lower = headline.lower()
-    filter_keywords = ["varning", "warning", "varningar", "warnings", "obs"]
+    filter_keywords = ["varning", "warning", "varningar", "warnings", "obs", "anm"]
     
     return any(keyword in headline_lower for keyword in filter_keywords)
 
@@ -212,10 +212,30 @@ def save_chunks(
     chunk_id = 1
     
     for section in sections:
-        # Filter out warning sections
+        # Filter out warning sections by title
         if is_warning_section(section.get("section_or_chapter", "")):
             continue
-        
+
+        # Strip any residual VARNING blocks from content (belt-and-suspenders)
+        content = section.get("content", "")
+        content = re.sub(
+            r'#{4,6} VARNING\n(?:\*\*[^\n]*\n?)*',
+            '',
+            content,
+            flags=re.IGNORECASE
+        ).strip()
+
+        # Skip chunks that have no meaningful content after cleaning
+        if not content:
+            continue
+
+        # Skip fragmented spec/table content (many short lines, avg < 3 words/line)
+        non_empty_lines = [l for l in content.split('\n') if l.strip()]
+        if len(non_empty_lines) >= 3:
+            avg_words = sum(len(l.split()) for l in non_empty_lines) / len(non_empty_lines)
+            if avg_words < 3:
+                continue
+
         # Create chunk entry with full metadata
         chunk = {
             "chunk_id": chunk_id,
@@ -225,7 +245,7 @@ def save_chunks(
             "breadcrumb": section.get("breadcrumb", []),
             "page_number": section.get("page_number", 0),
             "level": section.get("level", 0),
-            "content": section.get("content", "")
+            "content": content
         }
         
         chunks.append(chunk)
@@ -381,6 +401,37 @@ def get_level2_sections(document_title: str) -> List[Dict[str, str]]:
         {"section_id": sid, "section_name": sections[sid]}
         for sid in sorted_ids
     ]
+
+
+def get_subsections_for_section(document_title: str, section_id: str) -> List[Dict[str, str]]:
+    """
+    Returns unique subsections (breadcrumb level 2) for a given top-level section.
+
+    Args:
+        document_title: title/identifier of the document
+        section_id: the top-level section name (breadcrumb[0])
+
+    Returns:
+        List of dicts [{"subsection_id": str, "subsection_name": str}, ...]
+        in document order
+    """
+    chunks = load_chunks(document_title)
+    if not chunks or not section_id:
+        return []
+
+    section_id_clean = str(section_id).strip()
+    seen: set = set()
+    subsections = []
+
+    for chunk in chunks:
+        breadcrumb = chunk.get("breadcrumb", [])
+        if len(breadcrumb) >= 2 and breadcrumb[0].strip() == section_id_clean:
+            sub_name = breadcrumb[1].strip()
+            if sub_name not in seen:
+                seen.add(sub_name)
+                subsections.append({"subsection_id": sub_name, "subsection_name": sub_name})
+
+    return subsections
 
 
 def get_chunks_for_section(document_title: str, section_id: str) -> List[Dict]:

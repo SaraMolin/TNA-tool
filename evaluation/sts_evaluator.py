@@ -102,16 +102,19 @@ def evaluate():
                 ]
                 embeddings = model.encode(texts_to_encode, show_progress_bar=False)
                 emb_analysis = embeddings[0]
+                all_scored = []
                 for i, (gt, depth) in enumerate(raw_matches):
                     gt_text = texts_to_encode[i + 1]
                     score = cosine_similarity(emb_analysis, embeddings[i + 1])
-                    match_entries.append({
+                    all_scored.append({
                         "gt_subtask_name": gt["subtask_name"],
                         "gt_section": gt["section_or_chapter"],
                         "match_depth": depth,
                         "gt_text": gt_text,
                         "similarity_score": round(score, 4),
                     })
+                best = max(all_scored, key=lambda x: x["similarity_score"])
+                match_entries = [best]
             else:
                 unmatched_count += 1
 
@@ -137,13 +140,18 @@ def evaluate():
 
 def _print_summary(results: list, skipped: list, unmatched_count: int):
     print("\n" + "=" * 80)
-    print(f"{'SUBTASK':<45} {'MATCHES':<8} SIMILARITY SCORES")
+    print(f"{'SUBTASK':<45} {'BEST MATCH GT-SUBTASK':<35} SCORE")
     print("=" * 80)
     for r in results:
         name = r["analysis_subtask"][:44]
-        n = len(r["matches"])
-        scores = ", ".join(str(m["similarity_score"]) for m in r["matches"]) or "–"
-        print(f"{name:<45} {n:<8} {scores}")
+        if r["matches"]:
+            best = r["matches"][0]
+            gt_name = best["gt_subtask_name"][:34]
+            score = best["similarity_score"]
+        else:
+            gt_name = "–"
+            score = "–"
+        print(f"{name:<45} {gt_name:<35} {score}")
     print("=" * 80)
     print(f"Totalt: {len(results)} analysis-subtasks | {unmatched_count} utan match | "
           f"{len(skipped)} GT-subtasks hoppade")

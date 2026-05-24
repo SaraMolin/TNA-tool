@@ -194,7 +194,7 @@ def render_section_selector():
     except (ValueError, IndexError):
         current_index = 0
     
-    # Render dropdown
+    # Render chapter dropdown
     selected_name = st.selectbox(
         "Kapitel att analysera",
         options=section_names,
@@ -202,12 +202,34 @@ def render_section_selector():
         key=f"section_selector_{doc_id}"
     )
 
-    # Save selection to registry
+    # Save chapter selection to registry and show subsection dropdown
     if selected_name:
         selected_index = section_names.index(selected_name)
         selected_id = section_ids[selected_index]
         document_registry.set_selected_section(doc_id, selected_id)
-        st.caption(f"Analyserar kapitel: **{selected_name}**")
+
+        # Load subsections for selected chapter
+        subsections = chunking.get_subsections_for_section(doc_title, selected_id)
+
+        if subsections:
+            HELA_KAPITLET = "Hela kapitlet"
+            sub_options = [HELA_KAPITLET] + [s["subsection_name"] for s in subsections]
+
+            selected_sub = st.selectbox(
+                "Underrubrik",
+                options=sub_options,
+                key=f"subsection_selector_{doc_id}"
+            )
+
+            if selected_sub == HELA_KAPITLET:
+                st.session_state[f"selected_subsection_{doc_id}"] = None
+                st.caption(f"Analyserar kapitel: **{selected_name}**")
+            else:
+                st.session_state[f"selected_subsection_{doc_id}"] = selected_sub
+                st.caption(f"Analyserar underrubrik: **{selected_sub}**")
+        else:
+            st.session_state[f"selected_subsection_{doc_id}"] = None
+            st.caption(f"Analyserar kapitel: **{selected_name}**")
 
 
 def render_run_analysis_button():
@@ -238,15 +260,20 @@ def render_run_analysis_button():
             doc_id = primary_doc["document_id"]
             doc_title = primary_doc["document_title"]
             
-            # Get selected section
+            # Get selected section and optional subsection
             selected_section_id = document_registry.get_selected_section(doc_id)
-            
+
             if not selected_section_id:
                 st.error("Välj en sektion innan du analyserar.")
                 return
-            
-            # Load chunks for the selected section only
-            section_chunks = chunking.get_chunks_for_section(doc_title, selected_section_id)
+
+            selected_subsection = st.session_state.get(f"selected_subsection_{doc_id}")
+
+            # Use subsection filter if set, otherwise use full chapter
+            filter_id = selected_subsection if selected_subsection else selected_section_id
+
+            # Load chunks for the selected section/subsection only
+            section_chunks = chunking.get_chunks_for_section(doc_title, filter_id)
             
             if not section_chunks:
                 st.error(f"Inga chunks hittades för sektion {selected_section_id}.")
@@ -260,7 +287,7 @@ def render_run_analysis_button():
                 return
 
             # Limit input size for safety — truncate at chunk boundaries to keep valid JSON
-            max_chars = 25000
+            max_chars = 40000
             if len(chunks_payload) > max_chars:
                 truncated = []
                 total_len = 0
