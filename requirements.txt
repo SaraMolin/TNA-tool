@@ -6,3 +6,4 @@ requests==2.31.0
 pytest==8.3.5
 pymupdf4llm==0.0.17
 sentence-transformers>=2.2.2
+matplotlib>=3.7.0

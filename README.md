@@ -116,6 +116,13 @@ tna-tool/
 ├── export/
 │   └── excel_exporter.py           # Excel-generering
 │
+├── evaluation/
+│   ├── sts_evaluator.py            # Semantisk similaritetsutvärdering (STS)
+│   └── label_coverage.py           # Täckningsrapport: GT vs chunks vs analys
+│
+├── goldlabels/
+│   └── groundtruth_sts.json        # Manuellt annoterad ground truth för STS
+│
 ├── uploads/                        # (Gitignored) Ursprungliga PDF:er
 ├── chunks/                         # (Gitignored) Segmenterad text
 └── output/                         # (Gitignored) LLM-resultat
@@ -172,6 +179,49 @@ Exporterad Excel-fil innehåller:
 - **Column E**: Standards/Document Reference (endast deluppgiftsrader)
 
 Rad-färgkodning: blå = uppgifter, grön = deluppgifter, gul = steg
+
+## Utvärdering
+
+Evalueringsverktygen körs från projektets rotkatalog (`TNA-tool/`) efter att en analys har genomförts via appen.
+
+### Förutsättningar
+
+```bash
+pip install sentence-transformers matplotlib
+```
+
+### STS-utvärdering — semantisk similaritet
+
+Jämför LLM-extraherade subtasks mot manuellt annoterad ground truth (`goldlabels/groundtruth_sts.json`) med cosine similarity via sentence-transformer-embeddings.
+
+**Kräver:** `output/latest_analysis.json` och `goldlabels/groundtruth_sts.json`
+
+```bash
+python -m evaluation.sts_evaluator
+```
+
+Skriver ut en tabell med similaritetspoäng per subtask och sparar resultatet till `output/sts_results.json`.
+
+### Label Coverage — täckningsrapport
+
+Jämför vilka sektioner som finns i ground truth, i chunks och i analysresultatet — allt filtrerat till samma avsnitt som senaste analysen täckte. Synliggör täckningsgap och namnkonventionsskillnader.
+
+**Kräver:** `output/latest_analysis.json`, `output/sts_results.json` och `goldlabels/groundtruth_sts.json`
+
+```bash
+python -m evaluation.label_coverage
+```
+
+Skriver ut en 4-kolumnstabell i terminalen och sparar en PNG-plot till `output/label_coverage.png`.
+
+| Kolumn | Innehåll |
+|--------|----------|
+| GT section_or_chapter | Sektioner från ground truth i analysens scope |
+| Chunk section_or_chapter | Sektioner från chunks.json som skickades till LLM |
+| analysis_section | Rubrik som LLM-analysen hänvisar till |
+| gt_section | Matchad GT-rubrik med similaritetspoäng |
+
+---
 
 ## Framtida utveckling
 

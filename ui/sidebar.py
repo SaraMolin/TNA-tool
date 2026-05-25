@@ -175,6 +175,15 @@ def render_section_selector():
     section_names = [s["section_name"] for s in sections]
     section_ids = [s["section_id"] for s in sections]
     
+    # Remove bare chapter-number entries (e.g. "4", "7") that leak in from
+    # level-1 headings with empty breadcrumbs — they are document-level
+    # anchors, not analyzable sections, and would falsely trigger the
+    # numeric filter below causing all text sections to be dropped.
+    non_bare = [(name, sid) for name, sid in zip(section_names, section_ids)
+                if not re.match(r'^\d+$', name.strip())]
+    if non_bare:
+        section_names, section_ids = [list(x) for x in zip(*non_bare)]
+
     # Check if there are any numeric sections
     has_numeric_sections = any(re.search(r'\d', name) for name in section_names)
     
