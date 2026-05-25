@@ -282,15 +282,73 @@ EXAMPEL 1 - OUTPUT:
   ]
 }}
 
-NU ANALYSERA DESSA CHUNKS (i JSON-format):
-{chunks_text}
+EXEMPEL 2 - INPUT:
+Isärtagning och hopsättning
+Isärtagning
+Gör patron ur.
+1. Tryck in bakstycksspärren (1). Vrid samtidigt bakstycket åt vänster (2)
+och släpp efter bakåt. Släpp efter försiktigt tills rekylfjädern är helt
+slapp.
+Bakstycket
+2. Ta ur rekylfjädern och slutstycket ur lådan.
+3. Tryck in spärren till mantelns lås-
+ring. Använd kornnyckeln eller ett
+annat lämpligt föremål.
+Låsringens spärr
+4. Skruva loss låsringen och ta bort manteln
+5. Ta bort pipan.
+6. Lossa kpistremmen om det behövs.
 
-Instruktioner för analys av chunks:
-- Chunks är redan strukturerade i JSON-format med metadata
-- Varje chunk har: chunk_id, document_filename, document_title, section_or_chapter, breadcrumb, page_number, level, content
-- Läs innehållet från "content"-fältet i varje chunk
-- Använd "section_or_chapter" och "breadcrumb" för att förstå dokumenthierarkin
-- Se till att alla chunks från denna sektion analyseras
+EXEMPEL 2 - OUTPUT:
+{{
+  "tasks": [
+    {{
+      "task": "Isärtagning och hopsättning av kulsprutepistol",
+      "task_id": "01-00-00",
+      "subtasks": [
+        {{
+          "subtask": "Isärtagning",
+          "subtask_id": "01-01-00",
+          "steps": [
+            {{
+              "step": "Tryck in bakstycksspärren och vrid samtidigt bakstycket åt vänster och släpp efter bakåt. Släpp efter försiktigt tills rekylfjädern är heltslapp.",
+              "step_id": "01-01-01"
+            }},
+            {{
+              "step": "Ta ur rekylfjädern och slutstycket ur lådan",
+              "step_id": "01-01-02"
+            }},
+            {{
+              "step": "Tryck in spärren till mantelns låsring",
+              "step_id": "01-01-03"
+            }},
+            {{
+              "step": "Skruva loss låsringen och ta bort manteln",
+              "step_id": "01-01-04"
+            }},
+            {{
+              "step": "Ta bort pipan",
+              "step_id": "01-01-05"
+            }},
+            {{
+              "step": "Lossa kpistremmen om det behövs",
+              "step_id": "01-01-06"
+            }}
+          ],
+          "traceability": {{
+            "document_title": "soldr_kpist.pdf",
+            "section_or_chapter": "Isärtagning och hopsättning"
+          }},
+          "confidence": "high",
+          "uncertain": false
+        }},
+      ]
+    }}
+  ]
+}}
+
+NU ANALYSERA DENNA TEXT:
+{chunks_text}
 
 Returnera ENDAST JSON enligt detta schema. Alla fält måste finnas (inga tomma strängar):
 
