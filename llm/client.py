@@ -48,7 +48,7 @@ class AzureLLMClient:
         self,
         system_prompt: str,
         user_message: str,
-        temperature: float = 0.3,
+        temperature: float = 0.0,
         max_tokens: int = 65536
     ) -> Optional[str]:
         """
@@ -124,7 +124,7 @@ class AzureLLMClient:
         self,
         system_prompt: str,
         user_message: str,
-        temperature: float = 0.1,
+        temperature: float = 0.0,
         max_tokens: int = 65536
     ) -> Optional[dict]:
         """
