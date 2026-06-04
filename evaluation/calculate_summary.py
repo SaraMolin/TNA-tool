@@ -24,7 +24,10 @@ SCORE_COLUMNS = [
 
 def load_rows(path: Path) -> list[dict]:
     with open(path, newline="", encoding="utf-8") as f:
-        return list(csv.DictReader(f))
+        sample = f.read(1024)
+        f.seek(0)
+        delimiter = ";" if ";" in sample.split("\n")[0] else ","
+        return list(csv.DictReader(f, delimiter=delimiter))
 
 
 def summarise(rows: list[dict]) -> None:
