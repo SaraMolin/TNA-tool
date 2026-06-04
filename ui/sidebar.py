@@ -318,6 +318,9 @@ def render_run_analysis_button():
                 chunks_payload
             )
             
+            # Show how many chunks are being sent (for debugging quota issues)
+            st.info(f"Skickar {len(section_chunks)} chunks ({len(chunks_payload)} tecken) till AI-modellen...")
+
             # Call LLM
             with st.spinner("Analyserar med AI..."):
                 llm_client = client.get_azure_client()
@@ -385,24 +388,52 @@ def render_download_excel_button():
         st.error(f"Fel vid generering av Excel-fil: {str(e)}")
 
 
+def render_run_sts_button():
+    """
+    Renders a button that runs sts_evaluator.evaluate() in-process.
+    Print output goes to the terminal (Streamlit's stdout) unchanged.
+    Only shown after an analysis result exists and groundtruth file is present.
+    """
+    if "analysis_result" not in st.session_state or st.session_state.analysis_result is None:
+        return
+
+    gt_path = Path("goldlabels/groundtruth_sts.json")
+    if not gt_path.exists():
+        return
+
+    st.subheader("Evaluation")
+
+    if st.button("Run STS-evaluation", use_container_width=True):
+        try:
+            with st.spinner("Running semantic similarity evaluation..."):
+                from evaluation import sts_evaluator
+                sts_evaluator.evaluate()
+            st.success("Evaluation complete! See terminal for detailed results.")
+        except Exception as e:
+            st.error(f"Error during evaluation: {str(e)}")
+
+
 def render_sidebar():
     """
     Renders the complete left sidebar.
     """
     with st.sidebar:
         st.title("TNA-verktyg")
-        
+
         render_upload_section()
         st.divider()
-        
+
         render_document_list()
         st.divider()
-        
+
         # NEW: Section selector between document list and analysis button
         render_section_selector()
         st.divider()
-        
+
         render_run_analysis_button()
         st.divider()
-        
+
         render_download_excel_button()
+        st.divider()
+
+        render_run_sts_button()

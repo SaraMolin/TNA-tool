@@ -81,21 +81,10 @@ GRUNDREGLER:
   * sätt "confidence": "low"
   * sätt "uncertain": true
 * Gör endast tolkningar som stöds av texten.
-* Gissa inte utanför textens innehål.
+* Gissa inte utanför textens innehåll.
 
 ---
 
-FILTRERING:
-
-* Ignorera:
-  * referenser till andra avsnitt
-  * navigationsinformation
-  * beskrivande text utan handlingar
-  * varningar och varningstext
-  * bilder och bildtexter
-* Extrahera endast procedurrelaterade handlingar
-
----
 OUTPUTKRAV:
 
 task_id: format XX-00-00

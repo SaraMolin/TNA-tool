@@ -7,9 +7,13 @@ prompts and receiving structured JSON responses via REST API.
 
 from typing import Optional
 import json
+import time
 import requests
 
 from config import settings
+
+_MAX_RETRIES = 8
+_BASE_BACKOFF = 30  # seconds to wait when Retry-After header is absent
 
 
 class AzureLLMClient:
@@ -59,48 +63,62 @@ class AzureLLMClient:
         Returns:
             The LLM's response text, or None if an error occurred
         """
-        try:
-            # Construct Azure OpenAI REST API URL
-            url = f"{self.endpoint}/openai/deployments/{self.model_name}/chat/completions?api-version=2025-01-01-preview"
-            
-            headers = {
-                "api-key": self.api_key,
-                "Content-Type": "application/json"
-            }
-            
-            payload = {
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_message}
-                ],
-                "temperature": temperature,
-                "max_completion_tokens": max_tokens,  # GPT-5.4 parameter
-            }
-            
-            response = requests.post(url, headers=headers, json=payload, timeout=600)
-            response.raise_for_status()
-            
-            result = response.json()
-            
-            if "choices" in result and len(result["choices"]) > 0:
-                return result["choices"][0]["message"]["content"]
-            
-            return None
-        
-        except requests.exceptions.RequestException as e:
-            print(f"Error communicating with Azure LLM: {str(e)}")
-            print(f"Endpoint: {self.endpoint}")
-            print(f"Model: {self.model_name}")
-            if hasattr(e, 'response') and e.response is not None:
-                try:
-                    print(f"Response: {e.response.json()}")
-                except:
-                    print(f"Response: {e.response.text}")
-            return None
-        
-        except Exception as e:
-            print(f"Unexpected error: {str(e)}")
-            return None
+        url = f"{self.endpoint}/openai/deployments/{self.model_name}/chat/completions?api-version=2025-01-01-preview"
+        headers = {
+            "api-key": self.api_key,
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message},
+            ],
+            "temperature": temperature,
+            "max_completion_tokens": max_tokens,
+        }
+
+        backoff = _BASE_BACKOFF
+        for attempt in range(1, _MAX_RETRIES + 1):
+            try:
+                response = requests.post(url, headers=headers, json=payload, timeout=600)
+
+                if response.status_code == 429:
+                    retry_after = response.headers.get("Retry-After", "")
+                    try:
+                        wait = int(retry_after)
+                    except (ValueError, TypeError):
+                        wait = _BASE_BACKOFF
+                    print(f"Rate limit hit (attempt {attempt}/{_MAX_RETRIES}). Waiting {wait}s...")
+                    time.sleep(wait)
+                    continue
+
+                response.raise_for_status()
+                result = response.json()
+
+                if "choices" in result and len(result["choices"]) > 0:
+                    return result["choices"][0]["message"]["content"]
+                return None
+
+            except requests.exceptions.RequestException as e:
+                if attempt == _MAX_RETRIES:
+                    print(f"Error communicating with Azure LLM: {str(e)}")
+                    print(f"Endpoint: {self.endpoint}")
+                    print(f"Model: {self.model_name}")
+                    if hasattr(e, "response") and e.response is not None:
+                        try:
+                            print(f"Response: {e.response.json()}")
+                        except Exception:
+                            print(f"Response: {e.response.text}")
+                    return None
+                print(f"Request error on attempt {attempt}: {str(e)}. Retrying in {backoff}s...")
+                time.sleep(backoff)
+                backoff *= 2
+
+            except Exception as e:
+                print(f"Unexpected error: {str(e)}")
+                return None
+
+        return None
     
     def send_prompt_for_json(
         self,

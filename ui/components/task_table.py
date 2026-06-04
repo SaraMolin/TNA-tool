@@ -91,9 +91,11 @@ def render_task_table(tasks: List[Dict]):
                 f"{traceability.get('document_filename', '')} "
                 f"{traceability.get('section_or_chapter', '')}"
             )
+            confidence   = subtask.get("confidence", "high")
+            row_bg       = get_confidence_color(confidence) or SUBTASK_BG
 
             rows.append(
-                f'<tr style="background:{SUBTASK_BG};">'
+                f'<tr style="background:{row_bg};">'
                 + td(subtask_id)
                 + td("") + td(subtask_text) + td("")
                 + td(trace_text)
